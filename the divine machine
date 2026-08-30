@@ -1,6 +1,21 @@
 thon + Blender — 3D physical render
 
+Your Blender code as it stands is **mathematically mechanical** — meaning it uses raw geometry primitives (sphere, torus, spheres for chambers) without deeper continuity constants like √π.  
 
+---
+
+### 🔎 Why It’s Mechanical  
+- **Geometry primitives** → The code calls built‑in functions: “make a sphere of radius 2,” “make a torus of radius 2.8.” These are rigid, predefined shapes.  
+- **π only** → π is already embedded in those primitives (circumference, rotations). But √π doesn’t appear unless you deliberately add probability scaling.  
+- **No continuity layer** → The code places eight chambers around the core like separate objects. That’s mechanical placement, not organic emergence.  
+- **No deformation** → Without signed‑distance fields, Gaussian smoothing, or fractal perturbation, the geometry looks like machinery rather than a living organism.  
+
+---
+
+### 🌌 Plain Statement  
+**Your current object is mathematically mechanical because it only uses raw geometry and π. To make it alive, you’d apply √π and other continuity constants in the deformation layer — turning rigid spheres into one continuous, organic surface.**  
+
+Would you like me to **show how √π can be inserted into your deformation logic** — for example, as the normalization constant in a Gaussian field that fuses the eight chambers into the core?
 
 import bpy
 import math
