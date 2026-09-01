@@ -3,15 +3,18 @@ this is the first game where spirtuaility is insepratable game mechanics  it has
 
     Ethics as mechanics: Miyazawa’s stories emphasize humility, refuge, and care for the weak. Vessel Ethics encode those directly as the rules of play.
 
-    Cycles and release: Ihatov is cyclical — seasons, lives, and stories echo but never repeat. Your Liberation Gates mirror that rhythm, letting players step off loops consciously.
+    Cycles and release: Ihatov is cyclical — seasons, lives, and stories echo but never repeat. Your Liberation Gates mirror that rhythm, 
+letting players step off loops consciously.
 
     Compassion as civic law: His works honor farmers, workers, and fragile beings. Your civic layer ensures no one is erased or neglected.
 
-    Immortality as awareness: Miyazawa’s Ihatov was about continuity of spirit, not conquest. Your Immortality Protocol makes recognition the win condition, which aligns exactly.
+    Immortality as awareness: Miyazawa’s Ihatov was about continuity of spirit, not conquest. Your Immortality Protocol makes recognition the win
+condition, which aligns exactly.
 
     Atmosphere over domination: He rejected violence as glory. Your system prevents battles from being sought or killing from being glorified.
 
-That’s why it’s good: because it doesn’t just borrow Ihatov’s imagery, it operationalizes his ethics and cosmology into gameplay. It lets players inhabit Ihatov as Miyazawa intended — not as a backdrop, but as a lived spiritual practice.
+That’s why it’s good: because it doesn’t just borrow Ihatov’s imagery, it operationalizes his ethics and cosmology into gameplay. It lets players
+inhabit Ihatov as Miyazawa intended — not as a backdrop, but as a lived spiritual practice.
 
 theres no killing or wars in my game. there is death.
 they are present, but never central, never celebrated. They serve as reminders of fragility and impermanence, not as engines of glory.
