@@ -54,3 +54,6 @@ This wording makes it ironclad proprietary: no one can touch, modify, or redistr
 7.General Clause — No Confusingly Similar Expressions
 No Confusingly Similar Expressions  
 No individual, organization, or third party may use, register, promote, or distribute any names, marks, logos, titles, or expressions that are identical to or confusingly similar with the licensor’s ecosystem, trademarks, or proprietary identifiers. Any attempt to imitate, approximate, or derive branding that could cause confusion, dilution, or misrepresentation will be treated as infringement and subject to enforcement under applicable intellectual property and trademark law.
+
+8.  
+The Magustelle Multimedia Ecosystem is proprietary and extends beyond any single source, author, or expression
