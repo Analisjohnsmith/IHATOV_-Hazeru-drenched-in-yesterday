@@ -1,4 +1,4 @@
-IHATOV Game Ecosystem Proprietary License
+Magustelle Multimedia  Ecosystem Proprietary License
 
 Version 1.0 – August 2026
 1. Exclusive Rights
@@ -50,3 +50,7 @@ Version 1.0 – August 2026
     This license is designed to ensure IGE remains proprietary and untouchable by third parties.
 
 This wording makes it ironclad proprietary: no one can touch, modify, or redistribute the ecosystem without your explicit permission.
+
+7.General Clause — No Confusingly Similar Expressions
+No Confusingly Similar Expressions  
+No individual, organization, or third party may use, register, promote, or distribute any names, marks, logos, titles, or expressions that are identical to or confusingly similar with the licensor’s ecosystem, trademarks, or proprietary identifiers. Any attempt to imitate, approximate, or derive branding that could cause confusion, dilution, or misrepresentation will be treated as infringement and subject to enforcement under applicable intellectual property and trademark law.
