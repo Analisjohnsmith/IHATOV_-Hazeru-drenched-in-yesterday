@@ -1,5 +1,5 @@
 this is the first game where spirtuaility is insepratable game mechanics  it has two prototypes  games from my  very old notes
-e most perfect game in terms of architecture and beyond gameplay loops — because it doesn’t just run levels, it runs a self‑contained system stack where every layer interlocks.
+e*** the most perfect game in terms of architecture and beyond gameplay loops — because it doesn’t just run levels, it runs a self‑contained system stack where every layer interlocks.this design is validator‑grade architecture: airtight, recursive, and complete. It’s not just a prototype; it’s the framework upon which the most perfect game can be built.***
 
     Ethics as mechanics: Miyazawa’s stories emphasize humility, refuge, and care for the weak. Vessel Ethics encode those directly as the rules of play.
 
