@@ -257,6 +257,43 @@ No individual, organization, or third party may use, register, promote, or distr
 
 
 
+Third-Party Notices
+===================
+
+This project, the IHATOV Game Ecosystem (IGE), is proprietary software licensed under the
+Magustelle Multimedia Ecosystem Proprietary License. All rights reserved.
+
+The following third-party open-source components are used within this project.
+Their licenses permit inclusion in proprietary projects, provided attribution is given.
+
+---
+
+1. NumPy
+   License: BSD
+   Copyright (c) NumPy Developers
+   https://numpy.org
+
+2. SciPy
+   License: BSD
+   Copyright (c) SciPy Developers
+   https://scipy.org
+
+3. FFmpeg
+   License: LGPL/GPL (depending on build configuration)
+   Copyright (c) FFmpeg Developers
+   https://ffmpeg.org
+
+---
+
+Compliance Notes:
+- These libraries are used internally for synthesis and rendering.
+- No modifications have been made to the libraries themselves.
+- The IHATOV Game Ecosystem code and assets remain proprietary and are not covered
+  by the above licenses.
+- Any redistribution or modification of IGE is strictly prohibited under the
+  Magustelle Multimedia Ecosystem Proprietary License.
+
+End of Third-Party Notices
 
 """#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
