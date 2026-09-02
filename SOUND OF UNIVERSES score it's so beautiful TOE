@@ -1,0 +1,397 @@
+#!/usr/bin/env python3
+"""
+Sound of Universes — 15-minute high-fidelity render
+====================================================
+Open-source synthesis of the Kernel Guitar Suite from `anime.txt`,
+extended into a full 15-minute album-length piece.
+
+Engine: numpy/scipy (BSD) + ffmpeg (LGPL) for encoding.
+No closed-source or proprietary code, libs, or samples.
+
+Rendering approach
+------------------
+Rather than merely looping 1 minute, we compose a 15-minute "suite" whose
+movements are driven by the eight operators of the score:
+   Ω resonance / λ emergence / χ² collapse / ∅ void /
+   Ψ coherence / Δ transformation / Φ fusion / Θ topology
+
+Progression of movements (each uses the guitar voicings from the score):
+ 0:00  I.   Ω Resonance Drone      (pedal E, breath swell)
+ 2:00  II.  λ Emergence            (arpeggios E-G-B-E / E-G-B-A)
+ 4:00  III. χ² Collapse + ∅ Void   (muted attack clusters, long silences)
+ 6:00  IV.  Ψ Coherence            (harmonics, phase-locked fifths)
+ 8:00  V.   Φ Fusion               (double-stops, layered timbres)
+10:00  VI.  Θ Topology → Ω Close    (geometric chord progressions + pedal return)
+
+Fidelities: 48kHz, float32, stereo, additive+physical modeling, convolution
+reverb, gentle mastering chain (soft-knee saturation + limiter).
+"""
+
+import numpy as np
+import scipy.signal as sig
+import scipy.io.wavfile as wav
+import itertools, subprocess, os, sys
+
+SR = 48000
+CH = 2
+BPM = 70
+BEAT = 60.0 / BPM            # seconds per beat
+BAR = BEAT * 4               # seconds per 4/4 bar
+DUR = 15 * 60                # 15 minutes total
+
+# Absolute start time (sec) of each movement boundary
+SEC_I = 0.0
+SEC_II = 2 * 60
+SEC_III = 4 * 60
+SEC_IV = 6 * 60
+SEC_V = 8 * 60
+SEC_VI = 10 * 60
+SEC_END = 15 * 60
+
+
+def t2freq(note):
+    """MIDI note name -> frequency (12TET, A4=440)."""
+    names = {'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4,
+             'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9,
+             'A#': 10, 'Bb': 10, 'B': 11}
+    p = names[note[:-1].upper()]
+    octave = int(note[-1])
+    midi = 12 * (octave + 1) + p
+    return 440.0 * 2 ** ((midi - 69) / 12.0)
+
+
+# ----- fret frequencies (standard tuning EADGBE) -----
+def gtrnote(string_pitch, fret):
+    return t2freq(string_pitch) * 2 ** (fret / 12.0)
+
+
+# =====================================================================
+#  Synthesis primitives
+# =====================================================================
+def place(mono, start, end=None):
+    """Return (mono_audio, abs_start_s, abs_end_s) tuple container."""
+    return mono, start, end
+
+
+def mix(buf, mono, start, gain=1.0):
+    """Add a mono track into stereo buffer at absolute time `start`."""
+    start_i = int(start * SR)
+    if start_i >= buf.shape[0]:
+        return
+    ln = mono.shape[0]
+    stop_i = min(start_i + ln, buf.shape[0])
+    avail = stop_i - start_i
+    if avail <= 0:
+        return
+    seg = mono[:avail] * gain
+    buf[start_i:stop_i, 0] += seg
+    buf[start_i:stop_i, 1] += seg
+
+
+def env_ad(vals, a, d, s, r):
+    """ADSR envelope applied to a time array (already computed)."""
+    n = vals.shape[0]
+    at, dt, st, rt = int(a * SR), int(d * SR), int(s * SR), int(r * SR)
+    env = np.ones(n, dtype=np.float32)
+    at = min(at, n); dt = min(dt, n); st = min(st, n); rt = min(rt, n)
+    if at > 0:
+        env[:at] = np.linspace(0.0, 1.0, at)
+    if dt > 0:
+        env[at:at + dt] = np.linspace(1.0, s, dt)
+    env[at + dt:max(at + dt, n - rt)] = s
+    if rt > 0:
+        env[n - rt:] = np.linspace(s, 0.0, rt)
+    return vals * env
+
+
+def pluck(freq, dur, arr=None, pickup=6.0, decay=3.0, vibr=False, vib_depth=3.0,
+          vib_rate=5.0, noise_amt=0.12, harmonics=8):
+    """Physically-modeled plucked string via Karplus-Strong + harmonic body."""
+    N = int(dur * SR)
+    if N <= 0:
+        return np.zeros(1, np.float32)
+    f = np.float64(freq)
+    if f <= 0:
+        return np.zeros(N, np.float32)
+    # Karplus-Strong using a delay line of ~one period
+    dl = int(SR / f)
+    dl = max(dl, 2)
+    ring = np.zeros(dl, np.float64)
+    rng = np.random.default_rng(123456 + int(f))
+    ring[:] = rng.uniform(-1, 1, dl)
+    ks = np.zeros(N, np.float64)
+    idx = 0
+    while idx < N:
+        take = min(dl, N - idx)
+        blk = np.zeros(take, np.float64)
+        for j in range(1, take):
+            blk[j] = ring[(idx + j) % dl]
+        ks[idx:idx + take] = blk
+        idx += take
+        # leaky average low-pass = string damping
+        ring_next = 0.5 * (ring + np.roll(ring, -1))
+        ring = ring_next * decay ** (1.0 / 44100.0)
+    # decay envelope
+    ksm = np.exp(-np.arange(N) / (SR * (2.5 + pickup * 0.2))) if True else None
+    ks *= ksm
+    # vibrato
+    if vibr:
+        t = np.arange(N) / SR
+        ks *= (1.0 + vib_depth * np.sin(2 * np.pi * vib_rate * t))
+    # brighten / add noise transient
+    noise = rng.normal(0, noise_amt, N) * np.exp(-np.arange(N) / (SR * 0.02))
+    sigout = ks + noise
+    out = np.float32(sigout)
+    return env_ad(out, 0.004, 0.02, 0.85, max(dur * 0.3, 0.05))
+
+
+def tone(freq, dur, harm=(1.0, 0.5, 0.25, 0.12, 0.06), fb=0.0,
+         attack=0.02, vibr_depth=4.0, vibr_rate=5.5):
+    """Additive tone (bell / pad / voice-like) with detunable harmonics."""
+    N = int(dur * SR)
+    f = np.float64(freq)
+    if f <= 0:
+        return np.zeros(N, np.float32)
+    t = np.arange(N) / SR
+    out = np.zeros(N, np.float64)
+    for i, amp in enumerate(harm, start=1):
+        # slight detune each partial for richness
+        fd = f * i * (1 + 0.001 * np.sin(0.13 * i))
+        phase = 2 * np.pi * fd * t
+        if i == 1 and vibr_depth:
+            phase = phase + vibr_depth * (np.sin(2 * np.pi * vibr_rate * t) /
+                                          (2 * np.pi * vibr_rate))
+        out += amp * np.sin(phase)
+    # feedback modulation creates subtle inharmonic shimmer
+    if fb:
+        out += fb * np.sin(2 * np.pi * f * 0.5 * t) * np.cos(2 * np.pi * f * 0.497 * t)
+    out *= 0.5
+    return env_ad(np.float32(out), attack, 0.05, 0.7, max(dur * 0.4, 0.05))
+
+
+def drone(freq, dur, detune=0.07, depth=0.9):
+    """Slowly morphing ambient drone (many partials, slow chord tone)."""
+    N = int(dur * SR)
+    t = np.arange(N) / SR
+    out = np.zeros(N, np.float64)
+    partials = [(1, 1.0), (2, 0.45), (3, 0.25), (4, 0.12), (5, 0.06),
+                (6.02, 0.03), (7.05, 0.02)]
+    for mul, amp in partials:
+        fd = freq * mul
+        out += amp * np.sin(2 * np.pi * fd * t +
+                            depth * np.sin(2 * np.pi * 0.02 * t))
+    # slow amplitude breathing
+    out *= 0.6 + 0.4 * np.sin(2 * np.pi * 0.1 * t)
+    warm = 0.7
+    return env_ad(np.float32(out * warm), 4.0, 2.0, 0.8, 6.0)
+
+
+def noise_burst(dur, amt="x", low=200, high=4000):
+    """Muted percussive 'x' strike (the χ² collapse)."""
+    N = int(dur * SR)
+    rng = np.random.default_rng(42)
+    w = rng.normal(0, 1, N)
+    sos = sig.butter(4, [low, high], btype='band', fs=SR, output='sos')
+    w = sig.sosfilt(sos, w)
+    w *= np.exp(-np.arange(N) / (SR * min(dur * 0.25, 0.12)))
+    return np.float32(w * 0.8)
+
+
+def harmonics(freq, dur, partial=(0.5, 0.9)):
+    """Pure, sine-like natural harmonics (Ψ) — near-sinusoid."""
+    N = int(dur * SR)
+    t = np.arange(N) / SR
+    p = np.float32(np.sin(2 * np.pi * freq * partial[0] * t)) * 0.6 + \
+        np.float32(np.sin(2 * np.pi * freq * partial[1] * t)) * 0.4
+    return env_ad(p, 0.02, 0.03, 0.75, max(dur * 0.35, 0.06))
+
+
+# =====================================================================
+#  Convolution reverb (open-source, generated impulse)
+# =====================================================================
+def make_ir(dur=2.5, damp=0.5, decay=2.8):
+    N = int(dur * SR)
+    rng = np.random.default_rng(7)
+    ir = rng.normal(0, 1, N)
+    # exponentially decaying white noise = simple good-sounding IR
+    t = np.arange(N) / SR
+    ir *= np.exp(-t / decay)
+    # mild low-pass so high end decays faster (damping)
+    ir = sig.lfilter([1.0], [1.0, -0.4], ir)
+    ir /= np.sqrt(np.sum(ir ** 2)) * (damp * 1.5)
+    return np.float32(ir)
+
+
+def reverb(x, ir, wet=0.25, pre=0.010):
+    """Convolution reverb with a short predelay (channel-wise, FFTPartial)."""
+    pre_i = int(pre * SR)
+    base = x.shape[0]
+    xin = np.concatenate([np.zeros(pre_i), x]) if pre_i > 0 else x
+    dry = np.zeros(base, np.float32) if pre_i > 0 else x
+    if pre_i > 0:
+        dry[pre_i:] = x[:base - pre_i]
+    wetc_full = sig.fftconvolve(xin, ir, mode='full')
+    wetc = wetc_full[:base]
+    return dry * (1 - wet) + wetc * (wet * 1.5)
+
+
+# =====================================================================
+#  Composition
+# =====================================================================
+def build(buf, have):
+    """Fill `buf` (N x 2 float32) with the 15-minute score."""
+
+    # ---- I. Ω Resonance Drone (0:00–2:00) ----
+    print("mov I: resonance drone")
+    d1 = drone(t2freq('E2'), SEC_II - SEC_I, depth=0.5)
+    mix(buf, d1, SEC_I, 0.5)
+    # breath swells over the drone (whole notes)
+    bref = [('E3', 4), ('E3', 4), ('G3', 4), ('G3', 4)]
+    t = SEC_I + BAR * 0
+    for j in range(8):
+        nme, bb = bref[j % 4]
+        nn = tone(t2freq(nme), BAR * bb * 0.98, harm=(1, 0.4, 0.2, 0.1),
+                  vibr_depth=3.0, vibr_rate=4.5)
+        mix(buf, nn, t + 0.1, 0.16)
+        t += BAR * bb
+
+    # ---- II. λ Emergence (2:00–4:00): arpeggios ----
+    print("mov II: emergence")
+    pat = ['E3', 'G3', 'B3', 'E4']          # score Voicing
+    pat2 = ['E3', 'G3', 'B3', 'A3']
+    t = SEC_II
+    bar16 = BAR / 16.0
+    rng = np.random.default_rng(11)
+    while t < SEC_III - BAR * 2:
+        p = pat if rng.uniform() < 0.6 else pat2
+        for i, nm_ in enumerate(p):
+            nn = pluck(t2freq(nm_), bar16 * 4, vibr=True, pickup=6.4)
+            mix(buf, nn, t + bar16 * i * 4, 0.42)
+        t += BAR
+    # pad support
+    pd = tone(t2freq('E2'), SEC_III - SEC_II, harm=(1, 0.5, 0.3), attack=3)
+    mix(buf, pd, SEC_II, 0.18)
+
+    # ---- III. χ² Collapse + ∅ Void (4:00–6:00) ----
+    print("mov III: collapse + void")
+    t = SEC_III
+    while t < SEC_III + 60:
+        nbursts = int(rng.uniform(3, 7))
+        for _ in range(nbursts):
+            nb = noise_burst(BAR * 0.5, low=400, high=6000)
+            mix(buf, nb, t + rng.uniform(0, BAR * 0.4), 0.10)
+            t += BAR * 2
+        # long voids (∅)
+        v = tone(0, 1)  # placeholder ~ use silence
+        t += BAR * 4
+    # gentle storm gives way to silence, then a single Ω pulse
+    d2 = drone(t2freq('E2'), 12, depth=0.5)
+    mix(buf, d2, SEC_III + 90, 0.4)
+
+    # ---- IV. Ψ Coherence (6:00–8:00) ----
+    print("mov IV: coherence")
+    t = SEC_IV
+    chords = [(t2freq('E3'), t2freq('G3')),
+              (t2freq('B3'), t2freq('G3'))]
+    while t < SEC_V:
+        for a_f, b_f in chords:
+            h1 = harmonics(a_f, BAR * 1.8, partial=(0.5, 0.9))
+            h2 = harmonics(b_f, BAR * 1.8, partial=(0.5, 0.9))
+            hm = h1 + h2
+            mix(buf, hm, t + 0.1, 0.30)
+            t += BAR * 2
+    pad2 = tone(t2freq('G3'), SEC_V - SEC_IV, harm=(1, 0.5, 0.3), attack=3)
+    mix(buf, pad2, SEC_IV, 0.14)
+
+    # ---- V. Φ Fusion (8:00–10:00): double stops / layered timbre ----
+    print("mov V: fusion")
+    t = SEC_V
+    doubles = [('C4', 'E4'), ('C4', 'E4'), ('B3', 'D4'), ('A3', 'C4')]
+    while t < SEC_VI:
+        for n1_, n2_ in doubles:
+            a = pluck(t2freq(n1_), BAR * 1.7, vibr=True)
+            b = pluck(t2freq(n2_), BAR * 1.7, vibr=True, pickup=5.0)
+            mix(buf, a + b, t + 0.05, 0.35)
+            t += BAR * 2
+    pad3 = tone(t2freq('C4'), SEC_VI - SEC_V, harm=(1, 0.5), attack=3)
+    mix(buf, pad3, SEC_V, 0.12)
+
+    # ---- VI. Θ Topology → Ω close (10:00–15:00) ----
+    print("mov VI: topology + close")
+    # geometric progression G / A(m) / C / D
+    prog = [('G2', 'B2', 'D3'), ('A2', 'C3', 'E3'),
+            ('C3', 'E3', 'G3'), ('D3', 'F3', 'A3')]
+    t = SEC_VI
+    while t < SEC_VI + 90:
+        for tri in prog:
+            parts = [pluck(t2freq(p_), BAR * 2.2, vibr=True) for p_ in tri]
+            ch = parts[0] + parts[1] + parts[2]
+            mix(buf, ch, t + 0.05, 0.30)
+            t += BAR * 3
+    # return to Ω drone for the exit (10:00→ remaining)
+    d3 = drone(t2freq('E2'), SEC_END - SEC_VI, depth=0.6)
+    mix(buf, d3, SEC_VI + 30, 0.35)
+    # final breath / closing silence
+    fin = tone(t2freq('G3'), BAR * 2, harm=(1, 0.4, 0.2), vibr_depth=2.0)
+    mix(buf, fin, SEC_END - BAR * 2.6, 0.18)
+
+
+def main():
+    N = int(DUR * SR)
+    buf = np.zeros((N, CH), dtype=np.float32)
+
+    rng = np.random.default_rng(1)
+    build(buf, rng)
+
+    # ---- convolve reverb (stereo via shared IR, slight stereo separation) ----
+    print("reverb...")
+    ir = make_ir(dur=3.2, damp=0.5, decay=3.0)
+    L = reverb(buf[:, 0].astype(np.float32), ir, wet=0.20)
+    # second IR for the right channel for width
+    irR = make_ir(dur=3.2, damp=0.45, decay=3.4)
+    R = reverb(buf[:, 1].astype(np.float32), irR, wet=0.22)
+    buf[:, 0] = L
+    buf[:, 1] = R
+
+    # ---- mastering: soft-knee saturation + gentle limiter ----
+    print("mastering...")
+    x = buf.astype(np.float64)
+    # soft saturation
+    x = np.tanh(x * 1.4) / np.tanh(1.4)
+    # mild normalize + peak safety limiter
+    pk = np.max(np.abs(x))
+    if pk > 0.95:
+        x *= 0.95 / pk
+    # fade in/out
+    fi = int(0.4 * SR)
+    fo = int(3.0 * SR)
+    x[:fi] *= np.linspace(0, 1, fi)[:, None]
+    x[-fo:] *= np.linspace(1, 0, fo)[:, None]
+    out = np.float32(x)
+
+    # ---- remaster to -1.3 dBTP headroom so the MP3 encode stays clean ----
+    # (this reproduces exactly the delivered SOUND_OF_UNIVERSES_15min.mp3)
+    peak = float(np.abs(out).max())
+    target = 10 ** (-1.3 / 20.0)          # ~0.861
+    gain = target / peak if peak > 0 else 1.0
+    out = out * np.float32(gain)
+
+    # ---- write WAV then encode MP3 with ffmpeg (extreme fidelity, CBR 320) ----
+    print("writing wav...")
+    wav_file = "/home/deck/Documents/Default Project/game/_master_tmp.wav"
+    wav.write(wav_file, SR, out)
+
+    mp3_file = "/home/deck/Documents/Default Project/game/SOUND_OF_UNIVERSES_15min.mp3"
+    print("encoding mp3 (ffmpeg libmp3lame CBR 320k)...")
+    subprocess.run([
+        "ffmpeg", "-y", "-i", wav_file,
+        "-codec:a", "libmp3lame", "-b:a", "320k",
+        mp3_file
+    ], check=True, capture_output=True)
+    os.remove(wav_file)
+    print("DONE:", mp3_file)
+    print("size MB:", round(os.path.getsize(mp3_file) / 1e6, 1))
+
+
+if __name__ == "__main__":
+    main()
