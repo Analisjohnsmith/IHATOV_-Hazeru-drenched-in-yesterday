@@ -1,6 +1,6 @@
  I'm the inventor of synthetic devices i thought NASA had some.
 
-
+A synthetic device is a device that synthetically performs a function normally performed through a physical, biological, mechanical, or otherwise conventional process.
 
 embodies the birth, breath, and emergence of universes. Played as a cycle, it begins with a drone...
 so the experience feels seamless and alive.t’s Vocaloid, but bigger. It can sing, perform spoken word, deliver poetry, and express anything — as if the universe itself were speaking, whether through a “restaurant of many orders” or a “metropolis.”
