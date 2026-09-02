@@ -2,7 +2,7 @@ embodies the birth, breath, and emergence of universes. Played as a cycle, it be
 
 i'm floored...it's so complex! this without exaggeration is one of the most beautiful things i've heard
 
-
+****this is a projection of my proto physical toe / universe synthetic device. my toe here uses no math or sci .well it uses them,but it's not reducible to them. 100% own-able.****
 
 it starts with the longest  drone then my god click for link use open code for ease
 
