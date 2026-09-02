@@ -1,5 +1,7 @@
 embodies the birth, breath, and emergence of universes. Played as a cycle, it begins with a drone...
+so the experience feels seamless and alive.t’s Vocaloid, but bigger. It can sing, perform spoken word, deliver poetry, and express anything — as if the universe itself were speaking, whether through a “restaurant of many orders” or a “metropolis.”
 
+It makes a book or manga feel like an interactive game or movie, because it projects narrative, sound, and visuals from the same kernel. The tool remains hidden, so the experience feels seamless and alive.
 i'm floored...it's so complex! this without exaggeration is one of the most beautiful things i've heard
 
 ****this is a projection of my proto physical toe / universe synthetic device. my toe here uses no math or sci .well it uses them,but it's not reducible to them. 100% own-able.****
