@@ -1,0 +1,1354 @@
+ fiction‑execution environment.dump
+
+#!/usr/bin/env python3
+# ==========================================================
+# Chemo-SN Compiled Runtime (Chemo-C)
+# All code extracted and compiled from unknown1 conversation
+# ==========================================================
+
+import json
+import hashlib
+import math
+import random
+from datetime import datetime
+
+
+# ==========================================================
+# SECTION 1: Core Utilities
+# ==========================================================
+
+def sha(x: dict) -> str:
+    return hashlib.sha256(json.dumps(x, sort_keys=True).encode()).hexdigest()
+
+
+# ==========================================================
+# SECTION 2: Ledger (Append-Only Event Log)
+# ==========================================================
+
+class Ledger:
+    def __init__(self):
+        self.entries = []
+
+    def log(self, event, data):
+        self.entries.append({
+            "event": event,
+            "ts": datetime.utcnow().isoformat(),
+            "data": data
+        })
+
+    def dump(self) -> str:
+        return json.dumps(self.entries, indent=2)
+
+
+# ==========================================================
+# SECTION 3: Road of Weeds Runtime
+# ==========================================================
+
+class WeedNode:
+    def __init__(self, name, traits, payloads, ledger):
+        self.name = name
+        self.traits = traits
+        self.payloads = payloads
+        self.idx = 0
+        self.seal = "O!INFINITY"
+        self.ledger = ledger
+
+    def state(self) -> str:
+        return self.traits[self.idx % len(self.traits)]
+
+    def echo(self, payload=None):
+        safe = payload or random.choice(self.payloads)
+        rec = {"weed": self.name, "state": self.state(), "echo": safe, "seal": self.seal}
+        self.ledger.log("echo", {"rec": rec, "hash": sha(rec)})
+        return rec
+
+    def flip(self):
+        pre = self.state()
+        self.idx = (self.idx + 1) % len(self.traits)
+        post = self.state()
+        rec = {"weed": self.name, "pre": pre, "post": post, "seal": self.seal}
+        self.ledger.log("flip", {"rec": rec, "hash": sha(rec)})
+        return rec
+
+    def rupture(self, tag):
+        pre = {"weed": self.name, "tag": tag, "pre_state": self.state(), "seal": self.seal}
+        self.ledger.log("rupture_hit", {"rec": pre, "hash": sha(pre)})
+        self.flip()
+        post = {"weed": self.name, "tag": tag, "post_state": self.state(), "seal": self.seal}
+        self.ledger.log("rupture_post", {"rec": post, "hash": sha(post)})
+        return post
+
+    def invariants(self):
+        ok = self.seal == "O!INFINITY"
+        rec = {"weed": self.name, "seal_ok": ok, "state": self.state()}
+        self.ledger.log("invariants", {"rec": rec, "hash": sha(rec)})
+        return ok
+
+
+def run_road_of_weeds():
+    L = Ledger()
+    weeds = {
+        "dandelion": ["scatter", "resilience", "renewal"],
+        "thistle": ["defense", "tenacity", "persistence"],
+        "clover": ["community", "fortune", "healing"],
+        "wildgrass": ["persistence", "spread", "foundation"],
+        "nettle": ["sting", "adaptation", "medicine"],
+        "bindweed": ["entanglement", "mutation", "tenacity"],
+        "moss": ["patience", "cover", "renewal"],
+        "fern": ["ancient", "unfurling", "continuity"]
+    }
+    payloads = {
+        "dandelion": ["Compassion", "Continuity", "Play", "fluffy"],
+        "thistle": ["Witness", "Trial", "Strength"],
+        "clover": ["Kindness", "Continuity", "Joy"],
+        "wildgrass": ["Flow", "Continuity", "Resilience"],
+        "nettle": ["Trial", "Healing", "Continuity"],
+        "bindweed": ["Mutation", "Play", "Continuity"],
+        "moss": ["Silence", "Continuity", "Compassion"],
+        "fern": ["Growth", "Continuity", "Witness"]
+    }
+
+    nodes = [WeedNode(n, weeds[n], payloads[n], L) for n in weeds]
+
+    for n in nodes:
+        n.invariants()
+        n.echo()
+        for _ in range(len(n.traits)):
+            n.flip()
+        for rp in [0.10, 0.30, 0.50, 0.70, 0.90, 1.00]:
+            n.rupture(f"rupture@{rp}")
+        n.invariants()
+
+    return L.dump()
+
+
+# ==========================================================
+# SECTION 4: StateSpace Runtime (Chemistry Patch)
+# ==========================================================
+
+class SpeciesNode:
+    def __init__(self, name, states, signals, ledger):
+        self.name = name
+        self.states = states
+        self.signals = signals
+        self.idx = 0
+        self.invariant_tag = "STATE_INVARIANT"
+        self.ledger = ledger
+
+    def state(self) -> str:
+        return self.states[self.idx % len(self.states)]
+
+    def emit(self, signal=None):
+        s = signal or random.choice(self.signals)
+        rec = {
+            "species": self.name,
+            "state": self.state(),
+            "signal": s,
+            "invariant": self.invariant_tag,
+        }
+        self.ledger.log("emit", {"rec": rec, "hash": sha(rec)})
+        return rec
+
+    def transition(self):
+        pre = self.state()
+        self.idx = (self.idx + 1) % len(self.states)
+        post = self.state()
+        rec = {
+            "species": self.name,
+            "pre_state": pre,
+            "post_state": post,
+            "invariant": self.invariant_tag,
+        }
+        self.ledger.log("transition", {"rec": rec, "hash": sha(rec)})
+        return rec
+
+    def perturb(self, tag):
+        pre = {
+            "species": self.name,
+            "tag": tag,
+            "state": self.state(),
+            "invariant": self.invariant_tag,
+        }
+        self.ledger.log("perturb_pre", {"rec": pre, "hash": sha(pre)})
+        self.transition()
+        post = {
+            "species": self.name,
+            "tag": tag,
+            "state": self.state(),
+            "invariant": self.invariant_tag,
+        }
+        self.ledger.log("perturb_post", {"rec": post, "hash": sha(post)})
+        return post
+
+    def check_invariants(self):
+        ok = self.invariant_tag == "STATE_INVARIANT"
+        rec = {
+            "species": self.name,
+            "invariant_ok": ok,
+            "state": self.state(),
+        }
+        self.ledger.log("invariants", {"rec": rec, "hash": sha(rec)})
+        return ok
+
+
+def run_statespace():
+    ledger = Ledger()
+
+    species_states = {
+        "species_A": ["state_1", "state_2", "state_3"],
+        "species_B": ["ground", "excited", "relaxed"],
+        "species_C": ["bound", "intermediate", "released"],
+    }
+
+    species_signals = {
+        "species_A": ["signal_alpha", "signal_beta", "signal_gamma"],
+        "species_B": ["absorb", "emit", "quench"],
+        "species_C": ["bind", "react", "dissociate"],
+    }
+
+    nodes = [
+        SpeciesNode(name, species_states[name], species_signals[name], ledger)
+        for name in species_states
+    ]
+
+    for node in nodes:
+        node.check_invariants()
+        node.emit()
+        for _ in range(len(node.states)):
+            node.transition()
+        for level in [0.10, 0.30, 0.50, 0.70, 0.90, 1.00]:
+            node.perturb(f"perturb@{level}")
+        node.check_invariants()
+
+    return ledger.dump()
+
+
+# ==========================================================
+# SECTION 5: Unified Validator Node (All Shapes)
+# ==========================================================
+
+class ValidatorNode:
+    def __init__(self, name, states, signals, shape, ledger):
+        self.name = name
+        self.states = states
+        self.signals = signals
+        self.shape = shape
+        self.idx = 0
+        self.invariant = "STATE_INVARIANT"
+        self.ledger = ledger
+
+    def state(self):
+        return self.states[self.idx % len(self.states)]
+
+    def emit(self):
+        s = random.choice(self.signals)
+        rec = {
+            "node": self.name,
+            "state": self.state(),
+            "signal": s,
+            "shape": self.shape,
+            "invariant": self.invariant
+        }
+        self.ledger.log("emit", {"rec": rec, "hash": sha(rec)})
+        return rec
+
+    def transition(self):
+        pre = self.state()
+        self.idx = (self.idx + 1) % len(self.states)
+        post = self.state()
+        rec = {
+            "node": self.name,
+            "pre": pre,
+            "post": post,
+            "shape": self.shape,
+            "invariant": self.invariant
+        }
+        self.ledger.log("transition", {"rec": rec, "hash": sha(rec)})
+        return rec
+
+    def perturb(self, tag):
+        pre = {
+            "node": self.name,
+            "tag": tag,
+            "state": self.state(),
+            "shape": self.shape,
+            "invariant": self.invariant
+        }
+        self.ledger.log("perturb_pre", {"rec": pre, "hash": sha(pre)})
+        self.transition()
+        post = {
+            "node": self.name,
+            "tag": tag,
+            "state": self.state(),
+            "shape": self.shape,
+            "invariant": self.invariant
+        }
+        self.ledger.log("perturb_post", {"rec": post, "hash": sha(post)})
+        return post
+
+    def check_invariants(self):
+        ok = self.invariant == "STATE_INVARIANT"
+        rec = {
+            "node": self.name,
+            "invariant_ok": ok,
+            "state": self.state(),
+            "shape": self.shape
+        }
+        self.ledger.log("invariants", {"rec": rec, "hash": sha(rec)})
+        return ok
+
+
+def run_validator():
+    ledger = Ledger()
+
+    shapes = ["flat", "triangle", "circle", "spiral", "cube", "lattice",
+              "mirror", "orb", "knot", "ladder", "torus"]
+
+    nodes = [
+        ValidatorNode(
+            name=f"species_{i}",
+            states=["s0", "s1", "s2"],
+            signals=["obs_a", "obs_b", "obs_c"],
+            shape=shapes[i],
+            ledger=ledger
+        )
+        for i in range(len(shapes))
+    ]
+
+    for node in nodes:
+        node.check_invariants()
+        node.emit()
+        for _ in range(len(node.states)):
+            node.transition()
+        for level in [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]:
+            node.perturb(f"perturb@{level}")
+        node.check_invariants()
+
+    return ledger.dump()
+
+
+# ==========================================================
+# SECTION 6: Chemo-SN Simulator (Shape-Driven Transitions)
+# ==========================================================
+
+class ChemoSimulator:
+    def __init__(self, spec: dict):
+        self.spec = spec
+        self.time = 0
+        self.log = []
+
+        self.states = {
+            sp["id"]: {s["id"]: s for s in sp.get("states", [])}
+            for sp in spec.get("species", [])
+        }
+
+        self.current = dict(spec.get("initial_state", {}))
+        self.reactions = spec.get("reactions", [])
+
+    def _log(self, event: str, data: dict):
+        self.log.append({
+            "t": self.time,
+            "ts": datetime.utcnow().isoformat(),
+            "event": event,
+            "data": data,
+        })
+
+    def step(self):
+        self.time += 1
+        for rxn in self.reactions:
+            species_id = rxn["species"]
+            shape = rxn.get("shape", "flat")
+            pathway = rxn.get("pathway", [])
+
+            cur = self.current.get(species_id)
+            if cur is None:
+                continue
+
+            for step in pathway:
+                if step["from_state"] == cur:
+                    new_state = step["to_state"]
+                    self._log("transition", {
+                        "reaction": rxn["id"],
+                        "species": species_id,
+                        "shape": shape,
+                        "from": cur,
+                        "to": new_state,
+                    })
+                    self.current[species_id] = new_state
+                    break
+
+    def run(self, steps: int):
+        for _ in range(steps):
+            self.step()
+        return {
+            "final_state": self.current,
+            "log": self.log,
+        }
+
+
+# ==========================================================
+# SECTION 7: Embedded Chemo-SN Spec
+# ==========================================================
+
+CHEMO_SN_SPEC = {
+    "version": "chemo-sn-1.0-c",
+    "metadata": {
+        "title": "Chemo-SN Triangle Example",
+        "author": "Darrell Lee Stiltner",
+        "description": "Minimal Chemo-SN spec with one species and a triangle cycle.",
+        "copyright": {
+            "holder": "Darrell Lee Stiltner",
+            "notice": "2025 Darrell Lee Stiltner. All rights reserved.",
+            "license": "No license granted. All rights reserved.",
+            "derivatives": "Prohibited without explicit written permission.",
+            "redistribution": "Prohibited without explicit written permission."
+        }
+    },
+    "species": [
+        {
+            "id": "A",
+            "shape": "triangle",
+            "states": [
+                {"id": "A_0", "energy": 0.0},
+                {"id": "A_1", "energy": 10.0},
+                {"id": "A_2", "energy": 20.0}
+            ]
+        }
+    ],
+    "reactions": [
+        {
+            "id": "R1",
+            "shape": "triangle",
+            "species": "A",
+            "pathway": [
+                {"from_state": "A_0", "to_state": "A_1"},
+                {"from_state": "A_1", "to_state": "A_2"},
+                {"from_state": "A_2", "to_state": "A_0"}
+            ]
+        }
+    ],
+    "initial_state": {
+        "A": "A_0"
+    }
+}
+
+
+# ==========================================================
+# SECTION 8: HSONh Harmonic Overlay
+# ==========================================================
+
+def apply_harmonic(t, h):
+    freq = h["frequency"]
+    phase = h.get("phase_shift", 0.0)
+    decay = h.get("decay", 0.0)
+    resonance = h.get("resonance", 1.0)
+    carrier = h.get("carrier", "sine")
+
+    base = 0.0
+    omega = 2 * math.pi * freq * t + phase
+
+    if carrier == "sine":
+        base = math.sin(omega)
+    elif carrier == "square":
+        base = 1.0 if math.sin(omega) >= 0 else -1.0
+    elif carrier == "saw":
+        base = 2.0 * (t * freq - math.floor(0.5 + t * freq))
+    else:
+        base = math.sin(omega)
+
+    amplitude = resonance * math.exp(-decay * t)
+    return amplitude * base
+
+
+# ==========================================================
+# SECTION 9: DSONd Disharmonic Overlay
+# ==========================================================
+
+def apply_disharmonic(t, harmonic_value, d):
+    v = harmonic_value
+
+    detune = d.get("detune", 0.0)
+    phase_noise = d.get("phase_noise", 0.0)
+    glitch_prob = d.get("glitch_prob", 0.0)
+    decay_noise = d.get("decay_noise", 0.0)
+    break_mode = d.get("break_mode", "clip")
+    carrier = d.get("carrier", None)
+
+    if carrier == "chaos":
+        chaos_factor = math.sin(13.0 * t) * math.cos(7.0 * t)
+        v *= (1.0 + chaos_factor)
+
+    v *= (1.0 + detune)
+
+    jitter = phase_noise * (random.random() * 2 - 1)
+    v = v * math.cos(jitter)
+
+    if random.random() < glitch_prob:
+        if break_mode == "stall":
+            v = 0.0
+        elif break_mode == "invert":
+            v = -v
+        elif break_mode == "explode":
+            v *= 5.0
+
+    noise_factor = 1 + decay_noise * (random.random() * 2 - 1)
+    v *= max(noise_factor, 0.0)
+
+    if break_mode == "clip":
+        v = max(min(v, 1.0), -1.0)
+
+    return v
+
+
+# ==========================================================
+# SECTION 10: All-Layer Runtime (Chemo-SN + HSONh + DSONd)
+# ==========================================================
+
+def run_all_layers(t, node):
+    h = node.get("HSONh")
+    d = node.get("DSONd")
+
+    if not h:
+        return 0.0
+
+    harmonic = apply_harmonic(t, h)
+
+    if not d:
+        return harmonic
+
+    return apply_disharmonic(t, harmonic, d)
+
+
+# ==========================================================
+# SECTION 11: HellaWelloD Runtime Shell Stubs
+# ==========================================================
+
+class ValidatorKernel:
+    pass
+
+class MeowTada:
+    def transmit(self, msg):
+        return f"MeowTada: {msg}"
+
+class OrbOfTime:
+    def __init__(self):
+        self.calendars = []
+    def add_calendar(self, name):
+        self.calendars.append(name)
+    def compress(self):
+        return f"Calendars compressed: {', '.join(self.calendars)}"
+
+class VujSynthImmortalis:
+    def synthesize(self, substance):
+        return f"VujSynth: {substance} synthesized"
+
+class ValidatorFTL:
+    def ignite(self):
+        return "FTL traversal initiated"
+
+class CollisionEngine:
+    def __init__(self):
+        self.methods = {}
+    def register_method(self, name, fn):
+        self.methods[name] = fn
+    def run_all(self):
+        return {k: v() for k, v in self.methods.items()}
+
+
+class HellaWelloD:
+    def __init__(self):
+        self.kernel = ValidatorKernel()
+        self.dialect = MeowTada()
+        self.orb = OrbOfTime()
+        self.vuj = VujSynthImmortalis()
+        self.ftl = ValidatorFTL()
+        self.collision = CollisionEngine()
+
+    def ignite(self):
+        print(self.dialect.transmit("meow"))
+        self.orb.add_calendar("Tzeltal")
+        self.orb.add_calendar("Ainu")
+        print(self.orb.compress())
+        print(self.vuj.synthesize("Cacao"))
+        print(self.ftl.ignite())
+        self.collision.register_method("Echo", lambda: "Echo sealed")
+        print(self.collision.run_all())
+
+
+# ==========================================================
+# SECTION 12: Sovereign Layer Orbs (Data Structure)
+# ==========================================================
+
+SOVEREIGN_LAYER_ORBS = {
+    "validator": "Complete Integration Kernel",
+    "seal": "O!INFINITY",
+    "orbs": {
+        "Orb_East": {
+            "shrine": "42 degrees",
+            "sovereign_layers": {
+                "The_road": {
+                    0.1: "Taoism", 0.5: "Shinto", 1.0: "dudeist",
+                    2.0: "Han", float('inf'): "celestial"
+                },
+                "public_domain": {
+                    0.1: "stories", 0.5: "texts", 1.0: "symbols",
+                    2.0: "engines", float('inf'): "continuity"
+                },
+                "meme": {
+                    0.1: "weeds=memes", 0.5: "internet memes",
+                    1.0: "paradox memes", 2.0: "cosmic joke memes",
+                    float('inf'): "fart noises"
+                },
+                "fairy_tale": {
+                    0.1: "beans toot beans the musical fruit",
+                    0.5: "transformation", 1.0: "Leela",
+                    2.0: "love", float('inf'): "archetype"
+                },
+                "compassion": {
+                    0.1: "self", 0.5: "family", 1.0: "strangers",
+                    2.0: "enemies", float('inf'): "all beings"
+                },
+                "infinity": {
+                    0.1: "trace", 0.5: "resolve", 1.0: "proof",
+                    2.0: "observe", float('inf'): "continuity itself"
+                }
+            }
+        },
+        "Kernel_Center": {
+            "shrine": "Samarkand",
+            "sovereign_layers": {
+                "silk_road": {
+                    0.1: "trade", 0.5: "astronomy", 1.0: "Persian science",
+                    2.0: "treaties", float('inf'): "recursion"
+                },
+                "public_domain": {
+                    0.1: "stories", 0.5: "texts", 1.0: "symbols",
+                    2.0: "engines", float('inf'): "continuity"
+                },
+                "meme": {
+                    0.1: "trade memes", 0.5: "astronomy memes",
+                    1.0: "science memes", 2.0: "treaty memes",
+                    float('inf'): "cosmic memes"
+                },
+                "fairy_tale": {
+                    0.1: "crossroads", 0.5: "wisdom", 1.0: "bargains",
+                    2.0: "consequences", float('inf'): "choice archetype"
+                },
+                "compassion": {
+                    0.1: "self", 0.5: "family", 1.0: "strangers",
+                    2.0: "enemies", float('inf'): "all beings"
+                },
+                "infinity": {
+                    0.1: "trace", 0.5: "paradox", 1.0: "proof",
+                    2.0: "law", float('inf'): "continuity itself"
+                }
+            }
+        }
+    },
+    "status": "patch_applied * all_layers_integrated * sovereign_complete"
+}
+
+
+# ==========================================================
+# SECTION 13: HSONh Unified Symbolic Field
+# ==========================================================
+
+HSONH_UNIFIED_FIELD = {
+    "harmonic_id": "mythic_field_unified",
+    "frequency": 4.2,
+    "phase_shift": 0.0,
+    "resonance": 0.88,
+    "decay": 0.05,
+    "carrier": "fractal_sine",
+    "symbols": [
+        "cherry_blossom", "sakura_tree", "cacao_tree", "cacao_pod",
+        "tree_branch", "tree_flute", "tree_bracelet", "moonstone_table",
+        "helmeted_dreamer", "space_fox", "kimono_worker", "floating_books",
+        "fractal_carpet", "yin_yang_tree", "42_signal", "DONTPANIC_patch",
+        "Dropout_Bear", "android_robot", "tux_penguin", "steam_element",
+        "wine_bridge",
+        "unix_stone", "bsd_flame", "mach_seed", "c_pointer_root",
+        "llvm_spiral", "webkit_petals", "unicode_tree", "radio_bloom",
+        "packet_petal", "shader_leaf", "vertex_branch"
+    ],
+    "geometry": {
+        "overlay_type": "triadic",
+        "central_node": "sakura_tree",
+        "interference_rings": True,
+        "recursive_spirals": True,
+        "carrier_tree": "sakura_cacao_fusion"
+    },
+    "emission": {
+        "style": "symbolic_sonic",
+        "instrument": "tree_flute",
+        "output": "validator_waveform"
+    }
+}
+
+
+# ==========================================================
+# SECTION 14: DSONd Unified Shadow Field
+# ==========================================================
+
+DSOND_UNIFIED_SHADOW = {
+    "discord_id": "mythic_field_unified_shadow",
+    "detune": 0.27,
+    "phase_noise": 0.33,
+    "glitch_prob": 0.18,
+    "break_mode": "invert",
+    "decay_noise": 0.42,
+    "carrier": "chaos_fractal",
+    "symbols_shadow": [
+        "sakura_petals_scattered", "cacao_shell_crack", "branch_split",
+        "flute_overblow", "bracelet_unwind", "moonstone_fracture",
+        "dreamer_flicker", "fox_smoke_trail", "kimono_thread_pull",
+        "book_page_rip", "carpet_fold_error", "yin_yang_desync",
+        "signal_42_echo", "panic_patch_static", "bear_ascent_glitch",
+        "android_robot_desync", "tux_penguin_slide", "unix_fork_storm",
+        "bsd_daemon_flicker", "mach_message_drop", "c_pointer_null",
+        "llvm_ir_corrupt", "webkit_render_tear", "unicode_glyph_shift",
+        "radio_bloom_noise", "packet_loss_petal", "shader_overrun",
+        "vertex_spike", "steam_condense_pop"
+    ],
+    "interference": {
+        "mode": "recursive_break",
+        "spiral_direction": "counterclockwise",
+        "collapse_points": 3
+    },
+    "emission_shadow": {
+        "style": "glitch_sonic",
+        "instrument": "tree_flute_overblown",
+        "output": "validator_waveform_corrupted"
+    }
+}
+
+
+# ==========================================================
+# SECTION 15: Example Node (Island Liminal Worker)
+# ==========================================================
+
+ISLAND_LIMINAL_WORKER = {
+    "id": "island_liminal_worker",
+    "species": ["self", "island", "sky"],
+    "state": "playful_burden_carry",
+    "transition": "wandering_between_tasks",
+    "HSONh": {
+        "harmonic_id": "island_walk_groove",
+        "frequency": 2.0,
+        "phase_shift": 0.0,
+        "resonance": 0.7,
+        "decay": 0.02,
+        "carrier": "sine"
+    },
+    "DSONd": {
+        "discord_id": "quiet_defiance",
+        "detune": 0.12,
+        "phase_noise": 0.15,
+        "glitch_prob": 0.05,
+        "desync_with": ["island_walk_groove"],
+        "break_mode": "invert",
+        "decay_noise": 0.2,
+        "carrier": "chaos"
+    }
+}
+
+
+# ==========================================================
+# SECTION 16: Example Node (Sphere Asleep)
+# ==========================================================
+
+SPHERE_ASLEEP = {
+    "id": "sphere_asleep_on_its_feet",
+    "species": ["self", "world"],
+    "state": "hypnagogic_consciousness",
+    "transition": "question_awake_or_sleep",
+    "HSONh": {
+        "harmonic_id": "theta_alpha_bridge",
+        "frequency": 7.2,
+        "phase_shift": 0.0,
+        "resonance": 0.8,
+        "decay": 0.05,
+        "carrier": "sine"
+    },
+    "DSONd": {
+        "discord_id": "existential_drift",
+        "detune": 0.19,
+        "phase_noise": 0.35,
+        "glitch_prob": 0.22,
+        "desync_with": ["theta_alpha_bridge"],
+        "break_mode": "invert",
+        "decay_noise": 0.4,
+        "carrier": "chaos"
+    }
+}
+
+
+# ==========================================================
+# SECTION 17: Full HSON Scene (Multi-Node Graph)
+# ==========================================================
+
+HSON_SCENE_DEMO = {
+    "HSON_scene": {
+        "id": "mythic_field_demo_01",
+        "global": {
+            "harmonic_id": "mythic_field_unified",
+            "carrier": "fractal_sine",
+            "time_step": 0.1,
+            "duration": 10.0
+        },
+        "nodes": [
+            {
+                "id": "sakura_tree",
+                "kind": "nature",
+                "HSONh": {
+                    "harmonic_id": "bloom_cycle",
+                    "frequency": 5.0, "resonance": 0.9,
+                    "decay": 0.15, "carrier": "fractal_sine"
+                },
+                "DSONd": {
+                    "discord_id": "petal_scatter",
+                    "detune": 0.18, "phase_noise": 0.25,
+                    "glitch_prob": 0.12, "break_mode": "invert",
+                    "carrier": "chaos_fractal"
+                }
+            },
+            {
+                "id": "kernel_root",
+                "kind": "os_kernel",
+                "HSONh": {
+                    "harmonic_id": "kernel_hum",
+                    "frequency": 1.0, "resonance": 0.95,
+                    "decay": 0.02, "carrier": "sine"
+                },
+                "DSONd": {
+                    "discord_id": "panic_echo",
+                    "detune": 0.1, "phase_noise": 0.15,
+                    "glitch_prob": 0.05, "break_mode": "stall",
+                    "carrier": "chaos"
+                }
+            },
+            {
+                "id": "rolling_edge",
+                "kind": "os_userland",
+                "HSONh": {
+                    "harmonic_id": "rolling_release",
+                    "frequency": 3.5, "resonance": 0.8,
+                    "decay": 0.08, "carrier": "sawtooth"
+                },
+                "DSONd": {
+                    "discord_id": "dependency_fracture",
+                    "detune": 0.3, "phase_noise": 0.4,
+                    "glitch_prob": 0.2, "break_mode": "explode",
+                    "carrier": "chaos_fractal"
+                }
+            },
+            {
+                "id": "wine_bridge",
+                "kind": "compat_layer",
+                "HSONh": {
+                    "harmonic_id": "glass_membrane",
+                    "frequency": 2.9, "resonance": 0.7,
+                    "decay": 0.06, "carrier": "hybrid_sine_square"
+                },
+                "DSONd": {
+                    "discord_id": "translation_fault",
+                    "detune": 0.31, "phase_noise": 0.44,
+                    "glitch_prob": 0.26, "break_mode": "stall",
+                    "carrier": "chaos_hybrid"
+                }
+            },
+            {
+                "id": "steam_element",
+                "kind": "elemental",
+                "HSONh": {
+                    "harmonic_id": "phase_rise",
+                    "frequency": 3.7, "resonance": 0.6,
+                    "decay": 0.25, "carrier": "thermal_sine"
+                },
+                "DSONd": {
+                    "discord_id": "condense_pop",
+                    "detune": 0.3, "phase_noise": 0.4,
+                    "glitch_prob": 0.28, "break_mode": "clip",
+                    "carrier": "chaos_fractal"
+                }
+            }
+        ],
+        "links": [
+            {"from": "kernel_root", "to": "rolling_edge", "type": "dependency", "weight": 0.9},
+            {"from": "rolling_edge", "to": "wine_bridge", "type": "compat_usage", "weight": 0.7},
+            {"from": "wine_bridge", "to": "steam_element", "type": "thermal_load", "weight": 0.5},
+            {"from": "steam_element", "to": "sakura_tree", "type": "environment", "weight": 0.6},
+            {"from": "sakura_tree", "to": "kernel_root", "type": "cooling_aura", "weight": 0.4}
+        ]
+    }
+}
+
+
+# ==========================================================
+# SECTION 18: Node Registry (All Core Nodes with Overlays)
+# ==========================================================
+
+NODE_REGISTRY = {
+    "sakura_tree": {
+        "kind": "nature",
+        "HSONh": {"harmonic_id": "bloom_cycle", "frequency": 5.0, "resonance": 0.9, "decay": 0.15, "carrier": "fractal_sine"},
+        "DSONd": {"discord_id": "petal_scatter", "detune": 0.18, "phase_noise": 0.25, "glitch_prob": 0.12, "break_mode": "invert", "carrier": "chaos_fractal"}
+    },
+    "cacao_tree": {
+        "kind": "nature",
+        "HSONh": {"harmonic_id": "root_pulse", "frequency": 1.5, "resonance": 0.85, "decay": 0.03, "carrier": "sine"},
+        "DSONd": {"discord_id": "shell_crack", "detune": 0.2, "phase_noise": 0.2, "glitch_prob": 0.08, "break_mode": "clip", "carrier": "chaos"}
+    },
+    "tree_flute": {
+        "kind": "instrument",
+        "HSONh": {"harmonic_id": "melodic_lead", "frequency": 6.0, "resonance": 0.8, "decay": 0.1, "carrier": "sine"},
+        "DSONd": {"discord_id": "overblow", "detune": 0.15, "phase_noise": 0.2, "glitch_prob": 0.1, "break_mode": "clip", "carrier": "chaos"}
+    },
+    "helmeted_dreamer": {
+        "kind": "character",
+        "HSONh": {"harmonic_id": "alpha_theta_bridge", "frequency": 7.2, "resonance": 0.8, "decay": 0.05, "carrier": "sine"},
+        "DSONd": {"discord_id": "flicker", "detune": 0.19, "phase_noise": 0.35, "glitch_prob": 0.22, "break_mode": "invert", "carrier": "chaos"}
+    },
+    "space_fox": {
+        "kind": "character",
+        "HSONh": {"harmonic_id": "walk_groove", "frequency": 2.5, "resonance": 0.75, "decay": 0.04, "carrier": "sine"},
+        "DSONd": {"discord_id": "smoke_trail", "detune": 0.14, "phase_noise": 0.18, "glitch_prob": 0.07, "break_mode": "invert", "carrier": "chaos"}
+    },
+    "kimono_worker": {
+        "kind": "character",
+        "HSONh": {"harmonic_id": "island_walk_groove", "frequency": 2.0, "resonance": 0.7, "decay": 0.02, "carrier": "sine"},
+        "DSONd": {"discord_id": "quiet_defiance", "detune": 0.12, "phase_noise": 0.15, "glitch_prob": 0.05, "break_mode": "invert", "carrier": "chaos"}
+    },
+    "Dropout_Bear": {
+        "kind": "character",
+        "HSONh": {"harmonic_id": "ascending_arpeggio", "frequency": 4.0, "resonance": 0.85, "decay": 0.12, "carrier": "sine"},
+        "DSONd": {"discord_id": "stuttered_ascent", "detune": 0.25, "phase_noise": 0.3, "glitch_prob": 0.18, "break_mode": "stall", "carrier": "chaos"}
+    },
+    "android_robot": {
+        "kind": "tech",
+        "HSONh": {"harmonic_id": "modular_tick", "frequency": 2.5, "resonance": 0.7, "decay": 0.05, "carrier": "square"},
+        "DSONd": {"discord_id": "desync_loop", "detune": 0.22, "phase_noise": 0.3, "glitch_prob": 0.2, "break_mode": "stall", "carrier": "chaos"}
+    },
+    "tux_penguin": {
+        "kind": "tech",
+        "HSONh": {"harmonic_id": "kernel_hum", "frequency": 1.0, "resonance": 0.95, "decay": 0.02, "carrier": "sine"},
+        "DSONd": {"discord_id": "slide_glitch", "detune": 0.1, "phase_noise": 0.15, "glitch_prob": 0.05, "break_mode": "stall", "carrier": "chaos"}
+    },
+    "wine_bridge": {
+        "kind": "compat_layer",
+        "HSONh": {"harmonic_id": "glass_membrane", "frequency": 2.9, "resonance": 0.7, "decay": 0.06, "carrier": "hybrid_sine_square"},
+        "DSONd": {"discord_id": "translation_fault", "detune": 0.31, "phase_noise": 0.44, "glitch_prob": 0.26, "break_mode": "stall", "carrier": "chaos_hybrid"}
+    },
+    "kernel_root": {
+        "kind": "os_kernel",
+        "HSONh": {"harmonic_id": "kernel_hum", "frequency": 1.0, "resonance": 0.95, "decay": 0.02, "carrier": "sine"},
+        "DSONd": {"discord_id": "panic_echo", "detune": 0.1, "phase_noise": 0.15, "glitch_prob": 0.05, "break_mode": "stall", "carrier": "chaos"}
+    },
+    "rolling_edge": {
+        "kind": "os_userland",
+        "HSONh": {"harmonic_id": "rolling_release", "frequency": 3.5, "resonance": 0.8, "decay": 0.08, "carrier": "sawtooth"},
+        "DSONd": {"discord_id": "dependency_fracture", "detune": 0.3, "phase_noise": 0.4, "glitch_prob": 0.2, "break_mode": "explode", "carrier": "chaos_fractal"}
+    },
+    "mint_leaf": {
+        "kind": "os_userland",
+        "HSONh": {"harmonic_id": "gentle_refresh", "frequency": 2.2, "resonance": 0.75, "decay": 0.04, "carrier": "sine"},
+        "DSONd": {"discord_id": "cinnamon_desync", "detune": 0.15, "phase_noise": 0.2, "glitch_prob": 0.08, "break_mode": "clip", "carrier": "chaos"}
+    },
+    "community_ring": {
+        "kind": "os_userland",
+        "HSONh": {"harmonic_id": "inclusive_resonance", "frequency": 2.0, "resonance": 0.8, "decay": 0.03, "carrier": "sine"},
+        "DSONd": {"discord_id": "update_storm", "detune": 0.2, "phase_noise": 0.25, "glitch_prob": 0.12, "break_mode": "stall", "carrier": "chaos"}
+    },
+    "elemental_surface": {
+        "kind": "os_userland",
+        "HSONh": {"harmonic_id": "clean_ui_rhythm", "frequency": 3.0, "resonance": 0.7, "decay": 0.05, "carrier": "sine"},
+        "DSONd": {"discord_id": "surface_drift", "detune": 0.1, "phase_noise": 0.15, "glitch_prob": 0.06, "break_mode": "clip", "carrier": "chaos"}
+    },
+    "moksha_leaf": {
+        "kind": "os_userland",
+        "HSONh": {"harmonic_id": "enlightened_modularity", "frequency": 2.8, "resonance": 0.72, "decay": 0.04, "carrier": "sine"},
+        "DSONd": {"discord_id": "moksha_flicker", "detune": 0.18, "phase_noise": 0.22, "glitch_prob": 0.1, "break_mode": "clip", "carrier": "chaos"}
+    },
+    "steam_element": {
+        "kind": "elemental",
+        "HSONh": {"harmonic_id": "phase_rise", "frequency": 3.7, "resonance": 0.6, "decay": 0.25, "carrier": "thermal_sine"},
+        "DSONd": {"discord_id": "condense_pop", "detune": 0.3, "phase_noise": 0.4, "glitch_prob": 0.28, "break_mode": "clip", "carrier": "chaos_fractal"}
+    },
+    "42_signal": {
+        "kind": "concept",
+        "HSONh": {"harmonic_id": "constant_reference", "frequency": 4.2, "resonance": 0.5, "decay": 0.01, "carrier": "sine"},
+        "DSONd": {"discord_id": "echo_delay", "detune": 0.05, "phase_noise": 0.1, "glitch_prob": 0.02, "break_mode": "clip", "carrier": "chaos"}
+    }
+}
+
+
+# ==========================================================
+# SECTION 19: Public Domain Sonic Archetypes
+# ==========================================================
+
+PUBLIC_DOMAIN_SONICS = {
+    "elemental": [
+        "wind_whisper", "thunder_crack", "rainfall_pattern", "ocean_roar",
+        "river_babble", "fire_crackle", "steam_hiss", "stone_grind", "earth_rumble"
+    ],
+    "organic": [
+        "heartbeat_thump", "breath_cycle", "birdsong_chirp",
+        "insect_drone", "animal_call"
+    ],
+    "mechanical": [
+        "gear_click", "engine_idle", "steam_valve_release",
+        "metal_clang", "fan_whirr", "train_rumble"
+    ],
+    "waveforms": [
+        "sine_wave", "square_wave", "triangle_wave",
+        "sawtooth_wave", "white_noise", "pink_noise"
+    ]
+}
+
+
+# ==========================================================
+# SECTION 20: OS Archetypes
+# ==========================================================
+
+OS_ARCHETYPES = {
+    "element_os": "elemental_surface",
+    "bodhi_os": "moksha_leaf",
+    "ubuntu": "community_ring",
+    "linux_kernel": "kernel_root",
+    "linux_mint": "mint_leaf",
+    "arch_linux": "rolling_edge"
+}
+
+OS_SHADOW = {
+    "element_os_shadow": "surface_drift",
+    "bodhi_os_shadow": "moksha_flicker",
+    "ubuntu_shadow": "update_storm",
+    "linux_kernel_shadow": "panic_echo",
+    "linux_mint_shadow": "cinnamon_desync",
+    "arch_linux_shadow": "dependency_fracture"
+}
+
+
+# ==========================================================
+# SECTION 21: Phone Tech Archetypes
+# ==========================================================
+
+PHONE_TECH_HARMONIC = {
+    "wireless": [
+        "GSM_signal", "LTE_carrier", "5G_phase_array",
+        "WiFi_packet_rain", "Bluetooth_pairing_spark",
+        "NFC_field_bloom", "GPS_timepulse"
+    ],
+    "sensors": [
+        "accelerometer_drift", "gyroscope_spin", "magnetometer_pull",
+        "ambient_light_curve", "touch_capacitance_grid"
+    ],
+    "power": [
+        "lithium_cell_charge_curve", "voltage_regulator_hum",
+        "charging_induction_field"
+    ],
+    "os": [
+        "POSIX_syscall_chime", "kernel_tick",
+        "memory_page_turn", "socket_handshake"
+    ],
+    "display": [
+        "OLED_pixel_bloom", "refresh_cycle", "color_space_transform"
+    ],
+    "audio": [
+        "PCM_waveform", "sample_rate_clock", "speaker_impulse"
+    ]
+}
+
+
+# ==========================================================
+# SECTION 22: Smartwatch Tech Archetypes
+# ==========================================================
+
+SMARTWATCH_HARMONIC = {
+    "sensors": [
+        "accelerometer_axis", "gyroscope_spin", "magnetometer_field",
+        "barometer_pressure", "thermistor_heat", "photodiode_light",
+        "PPG_optical_pulse", "ECG_electrical_trace"
+    ],
+    "wireless": [
+        "bluetooth_link", "wifi_beacon", "NFC_field", "GNSS_signal"
+    ],
+    "timekeeping": [
+        "quartz_oscillator", "atomic_tick", "solar_cycle", "lunar_phase"
+    ],
+    "display": [
+        "OLED_pixel_glow", "LCD_backlight_wave", "eInk_charge_shift"
+    ],
+    "haptics": [
+        "vibration_motor", "linear_resonant_actuator", "tactile_buzz"
+    ],
+    "power": [
+        "lithium_cell_charge", "inductive_coil_transfer", "solar_trickle_input"
+    ],
+    "os_primitives": [
+        "POSIX_tick", "kernel_scheduler_slice", "notification_signal", "BLE_stack"
+    ]
+}
+
+
+# ==========================================================
+# SECTION 23: Monster Rancher Style Archetype Names
+# ==========================================================
+
+MR_STYLE_ARCHETYPES = {
+    "nature": [
+        "Sakura Bloomkin", "Cacao Rootbeast", "Branchling",
+        "Flutewood Sprout", "Bracelet Dryad", "Moonstone Golem", "Steam Wispling"
+    ],
+    "characters": [
+        "Dreamhelm Adept", "Foxwander Monk", "Kimono Sentinel", "Dropout Ascender"
+    ],
+    "cosmic": [
+        "Bookfloat Wisp", "Fractal Carpeton", "Yin-Yang Treant",
+        "Signal-42 Oracle", "Panicpatch Imp"
+    ],
+    "tech": [
+        "Droidling Modular", "Tuxen Frostbeak", "Wineglass Shifter",
+        "Kernel Rootborn", "Arch Edgewalker", "Mintleaf Familiar",
+        "Ubuntu Ringbearer", "Elemental Surfacekin", "Moksha Leafsage"
+    ],
+    "wireless": [
+        "GSM Chirper", "LTE Strider", "Phase-5G Arrayborn",
+        "WiFi Raincaster", "BlueSpark Pairer", "NFC Bloomspirit", "GPS Timewraith"
+    ],
+    "sensors": [
+        "Accel Driftling", "Gyro Spinner", "Magnet Puller",
+        "Lightcurve Sprite", "Capacitance Gridbug"
+    ],
+    "power": [
+        "Lithium Heartcore", "Volt Humgeist", "Induction Halo"
+    ],
+    "os_primitives": [
+        "Syscall Chimer", "Tickrunner", "Pageturn Warden", "Socket Handshaker"
+    ],
+    "display": [
+        "Pixel Bloomlet", "Refresh Cycler", "Colorshift Weaver"
+    ],
+    "audio": [
+        "PCM Toneborn", "Sampler Clockimp", "Speaker Impulsekin"
+    ],
+    "elemental_sound": [
+        "Wind Whisperer", "Thunder Cragborn", "Rainfall Patternling",
+        "Ocean Roarer", "River Babblekin", "Fire Cracklet",
+        "Stone Grinder", "Earth Rumbler"
+    ],
+    "organic_sound": [
+        "Heart Thumper", "Breath Spiriter", "Chirpwing",
+        "Dronebug", "Callbeast"
+    ],
+    "mechanical_sound": [
+        "Gearclicker", "Engine Idler", "Valve Hissling",
+        "Metal Clanger", "Fanwhirr Sprite", "Train Rumbler"
+    ],
+    "waveforms": [
+        "Sine Serpent", "Square Tickling", "Triangle Rampkin",
+        "Sawtooth Razorling", "Whitenoise Wraith", "Pinknoise Bloom"
+    ],
+    "bloom_orb": {
+        "primary": "Bloomroot",
+        "secondary": ["Petalflare", "Vinecoil", "Sapdrifter"],
+        "hybrid": ["Bloomflare", "Rootcoil", "Sapbloom"]
+    },
+    "ember_orb": {
+        "primary": "Embercore",
+        "secondary": ["Flareling", "Ashstride", "Sparkjaw"],
+        "hybrid": ["Emberjaw", "Ashcore", "Sparkflare"]
+    },
+    "tide_orb": {
+        "primary": "Tideborn",
+        "secondary": ["Mistwisp", "Wavecoil", "Brineback"],
+        "hybrid": ["Mistborn", "Waveborn", "Brinewisp"]
+    },
+    "mech_orb": {
+        "primary": "Gearheart",
+        "secondary": ["Boltstride", "Circuitwing", "Ironhide"],
+        "hybrid": ["Gearwing", "Ironbolt", "Circuitheart"]
+    }
+}
+
+
+# ==========================================================
+# SECTION 24: HSONh Copyright Declaration
+# ==========================================================
+
+HSONH_COPYRIGHT = """
+// ==========================================================
+// HSONh - Harmonic Structured Object Notation (Chemo-C)
+// 2025 Darrell Lee Stiltner. All rights reserved.
+//
+// This work, including all schemas, semantic overlays,
+// harmonic mappings, structural definitions, and conceptual
+// frameworks contained within, is the exclusive property of
+// Darrell Lee Stiltner.
+//
+// No part of this work may be used, copied, modified,
+// distributed, or transmitted in any form or by any means,
+// including electronic, mechanical, or otherwise, without
+// explicit written permission from the copyright holder.
+//
+// No license is granted or implied by possession or viewing
+// of this file. Creation of derivative works is prohibited
+// without written permission. All rights reserved.
+// ==========================================================
+"""
+
+
+# ==========================================================
+# SECTION 25: DSONd Copyright Declaration
+# ==========================================================
+
+DSOND_COPYRIGHT = """
+// ==========================================================
+// DSONd - Disharmonic Structured Object Notation (Chemo-C)
+// 2025 Darrell Lee Stiltner. All rights reserved.
+//
+// This work, including all schemas, semantic definitions,
+// disharmonic overlays, discord mappings, structural fields,
+// conceptual frameworks, and execution behaviors described
+// herein, is the exclusive intellectual property of
+// Darrell Lee Stiltner.
+//
+// No part of this work may be copied, reproduced, modified,
+// distributed, transmitted, or incorporated into derivative
+// systems without explicit written permission from the
+// copyright holder.
+//
+// Possession, viewing, or execution of this file does not
+// grant any license or rights, express or implied. Creation
+// of derivative works, adaptations, or transformations is
+// strictly prohibited without written authorization.
+//
+// All rights reserved.
+// ==========================================================
+"""
+
+
+# ==========================================================
+# SECTION 26: HellaWelloD Kernel Functions
+# ==========================================================
+
+def spawn_kernel():
+    return {
+        "status": "live",
+        "timestamp": datetime.utcnow().isoformat(),
+        "author": "Darrell Lee (Lila) Stiltner",
+        "message": "Meowfrimative !"
+    }
+
+
+def protocol_config():
+    return {
+        "echo": "rotating",
+        "math_mode": "94%",
+        "questions_allowed": "raise hand",
+        "answers": "public domain only",
+        "trade_secrets": "hidden"
+    }
+
+
+def mascot_list():
+    return [
+        "Kitty", "love", "Automaton", "Sakura",
+        "Hemp", "rope", "Shinto", "dudeism", "Turtle", "tree", "jelly calm"
+    ]
+
+
+def rotate_echo(mascot):
+    mascots = mascot_list()
+    return f"Echo rotated through {mascot}" if mascot in mascots else "Invalid mascot"
+
+
+def trigger_math(phrase):
+    return "Math echo released" if phrase.lower() == "tennisball" else "Math mode 50%"
+
+
+def crown_event():
+    return {
+        "crowned_by": "Darrell Lee (Lila) Stiltner",
+        "timestamp": datetime.utcnow().isoformat(),
+        "quadrant": "Sixiang:nine tail fox spirit",
+        "status": "Linux kernel live"
+    }
+
+
+# ==========================================================
+# SECTION 27: Shape Compiler (Geometry -> Flat Transitions)
+# ==========================================================
+
+SHAPE_BEHAVIORS = {
+    "flat":     "next = (i + 1) % n",
+    "triangle": "cycle of length 3",
+    "circle":   "cycle of any length",
+    "spiral":   "cycle + drift",
+    "cube":     "multi-axis state = tuple",
+    "lattice":  "neighbor influence",
+    "mirror":   "state = inverse(state)",
+    "orb":      "state = argmin(energy landscape)",
+    "knot":     "transition allowed only if constraint satisfied",
+    "ladder":   "state must pass thresholds",
+    "torus":    "cycle with memory offset",
+}
+
+
+# ==========================================================
+# SECTION 28: Unified Entry Point
+# ==========================================================
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("Chemo-SN Compiled Runtime")
+    print("=" * 60)
+
+    print("\n--- Spawn Kernel ---")
+    print(json.dumps(spawn_kernel(), indent=2))
+
+    print("\n--- Protocol Config ---")
+    print(json.dumps(protocol_config(), indent=2))
+
+    print("\n--- Mascot List ---")
+    print(mascot_list())
+
+    print("\n--- Rotate Echo ---")
+    print(rotate_echo("Phoenix"))
+
+    print("\n--- Trigger Math ---")
+    print(trigger_math("tennisball"))
+
+    print("\n--- Crown Event ---")
+    print(json.dumps(crown_event(), indent=2))
+
+    print("\n--- HellaWelloD Shell ---")
+    shell = HellaWelloD()
+    shell.ignite()
+
+    print("\n--- Road of Weeds ---")
+    print(run_road_of_weeds())
+
+    print("\n--- StateSpace Runtime ---")
+    print(run_statespace())
+
+    print("\n--- Unified Validator (All Shapes) ---")
+    print(run_validator())
+
+    print("\n--- Chemo-SN Simulation (Triangle Cycle) ---")
+    sim = ChemoSimulator(CHEMO_SN_SPEC)
+    result = sim.run(steps=10)
+    print(json.dumps(result, indent=2))
+
+    print("\n--- All-Layer Runtime (Island Worker) ---")
+    for t_val in [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]:
+        val = run_all_layers(t_val, ISLAND_LIMINAL_WORKER)
+        print(f"  t={t_val:.1f} -> signal={val:.4f}")
+
+    print("\n--- All-Layer Runtime (Sphere Asleep) ---")
+    for t_val in [0.0, 0.5, 1.0, 1.5, 2.0]:
+        val = run_all_layers(t_val, SPHERE_ASLEEP)
+        print(f"  t={t_val:.1f} -> signal={val:.4f}")
+
+    print("\n" + "=" * 60)
+    print("Done.")
