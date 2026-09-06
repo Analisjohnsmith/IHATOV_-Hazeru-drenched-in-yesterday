@@ -1352,3 +1352,734 @@ if __name__ == "__main__":
 
     print("\n" + "=" * 60)
     print("Done.")
+# -*- coding: utf-8 -*-
+"""
+Fresh compile of the NEW content added to the "unknown1" transcript
+(lines 11887-14336). All human / collaborator names redacted.
+
+Sections:
+  1. Chemo-SN   - the deterministic runtime (ChemoSimulator + CHEMO_SN_SPEC)
+  2. HSON       - harmonic session layer (Moonstone/Jade 4D tree world data)
+  3. DSONd      - disharmonic overlay (per-orb, per-player, per-sovereign)
+  4. MATH42     - public-domain 42-based constants and transforms
+  5. THE        - the unified root construct binding all layers
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import random
+from datetime import datetime
+
+
+# =============================================================
+# SECTION 1 : CHEMO-SN (Deterministic Runtime)
+# =============================================================
+
+CHEMO_SN_SPEC = {
+    "version": "chemo-sn-1.0-c",
+    "metadata": {
+        "title": "Chemo-SN Triangle Example",
+        "description": "Minimal Chemo-SN spec with one species and a triangle cycle.",
+    },
+    "species": [
+        {
+            "id": "A",
+            "shape": "triangle",
+            "states": [
+                {"id": "A_0", "energy": 0.0},
+                {"id": "A_1", "energy": 10.0},
+                {"id": "A_2", "energy": 20.0},
+            ],
+        }
+    ],
+    "reactions": [
+        {
+            "id": "R1",
+            "shape": "triangle",
+            "species": "A",
+            "pathway": [
+                {"from_state": "A_0", "to_state": "A_1"},
+                {"from_state": "A_1", "to_state": "A_2"},
+                {"from_state": "A_2", "to_state": "A_0"},
+            ],
+        }
+    ],
+    "initial_state": {"A": "A_0"},
+}
+
+
+class ChemoSimulator:
+    """
+    Flat Chemo-SN interpreter.
+
+    - Reads a Chemo-SN spec (dict)
+    - Keeps current state per species
+    - Uses reaction 'pathway' lists to advance states
+    - Logs every transition with timestamp and shape
+    """
+
+    def __init__(self, spec: dict):
+        self.spec = spec
+        self.time = 0
+        self.log = []
+
+        # Index species states: states[species_id][state_id] -> state_dict
+        self.states = {
+            sp["id"]: {s["id"]: s for s in sp.get("states", [])}
+            for sp in spec.get("species", [])
+        }
+
+        # Current state per species
+        self.current = dict(spec.get("initial_state", {}))
+
+        # Reactions list (each reaction has shape + pathway)
+        self.reactions = spec.get("reactions", [])
+
+    def _log(self, event: str, data: dict):
+        self.log.append(
+            {
+                "t": self.time,
+                "ts": datetime.utcnow().isoformat(),
+                "event": event,
+                "data": data,
+            }
+        )
+
+    def step(self):
+        """
+        One flat Chemo-SN step:
+        - For each reaction, if current state matches a 'from_state',
+          advance to 'to_state' according to its shape/pathway.
+        """
+        self.time += 1
+
+        for rxn in self.reactions:
+            species_id = rxn["species"]
+            shape = rxn.get("shape", "flat")
+            pathway = rxn.get("pathway", [])
+
+            cur = self.current.get(species_id)
+            if cur is None:
+                continue
+
+            # Simple deterministic behavior: first matching pathway entry
+            for step in pathway:
+                if step["from_state"] == cur:
+                    new_state = step["to_state"]
+                    self._log(
+                        "transition",
+                        {
+                            "reaction": rxn["id"],
+                            "species": species_id,
+                            "shape": shape,
+                            "from": cur,
+                            "to": new_state,
+                        },
+                    )
+                    self.current[species_id] = new_state
+                    break  # one transition per reaction per step
+
+    def run(self, steps: int):
+        for _ in range(steps):
+            self.step()
+        return {
+            "final_state": self.current,
+            "log": self.log,
+        }
+
+
+# =============================================================
+# SECTION 2 : HSON (Harmonic Meaning / 4D Tree Session Data)
+# =============================================================
+
+HSON_WORLD = {
+    "name": "Moonstone_Jade_4D_Tree_Session",
+    "mode": "animeotakugirl_fractal_duet",
+    "players": [
+        {
+            "id": "moonstone",
+            "role": "left_side",
+            "element": "moonstone_blue",
+            "bracelet": "tree_branch_orbband",
+            "vibe": "calm_focus",
+        },
+        {
+            "id": "jade",
+            "role": "right_side",
+            "element": "jade_green",
+            "bracelet": "tree_branch_orbband",
+            "vibe": "curious_warm",
+        },
+    ],
+    "instrument": {
+        "id": "tree_360",
+        "type": "flat_fractal_board",
+        "position": "table_surface",
+        "shape": "radial_tree",
+        "nodes": [
+            {"id": "orb_m1", "side": "moonstone", "color": "moonstone_blue", "tone": "low_chime"},
+            {"id": "orb_m2", "side": "moonstone", "color": "moonstone_blue", "tone": "mid_chime"},
+            {"id": "orb_j1", "side": "jade", "color": "jade_green", "tone": "soft_bell"},
+            {"id": "orb_j2", "side": "jade", "color": "jade_green", "tone": "bright_bell"},
+            {"id": "orb_core", "side": "shared", "color": "petal_pink", "tone": "harmonic_blend"},
+        ],
+    },
+}
+
+HSON_EVENTS = [
+    {"t": 1, "actor": "moonstone", "action": "press", "target": "orb_m1"},
+    {"t": 2, "actor": "jade", "action": "press", "target": "orb_j1"},
+    {"t": 3, "actor": "moonstone", "action": "press", "target": "orb_core"},
+    {"t": 4, "actor": "jade", "action": "press", "target": "orb_core"},
+]
+
+HSON_SIMULATION_RUN = {
+    "step_1": {
+        "input": {"t": 1, "actor": "moonstone", "action": "press", "target": "orb_m1"},
+        "output": {
+            "sound": "low_chime",
+            "state_delta": "moonstone_side_activates",
+            "validator": "ping_moonstone_lane",
+        },
+    },
+    "step_2": {
+        "input": {"t": 2, "actor": "jade", "action": "press", "target": "orb_j1"},
+        "output": {
+            "sound": "soft_bell",
+            "state_delta": "jade_side_activates",
+            "validator": "ping_jade_lane",
+        },
+    },
+    "step_3": {
+        "input": {"t": 3, "actor": "moonstone", "action": "press", "target": "orb_core"},
+        "output": {
+            "sound": "harmonic_blend",
+            "state_delta": "core_half_awake",
+            "validator": "ping_core_from_moonstone",
+        },
+    },
+    "step_4": {
+        "input": {"t": 4, "actor": "jade", "action": "press", "target": "orb_core"},
+        "output": {
+            "sound": "harmonic_blend_x2",
+            "state_delta": "core_full_awake_fusion",
+            "validator": "fuse_moonstone_jade_channels",
+            "visual": "center_tree_spirals_360",
+        },
+    },
+}
+
+HSON_ENGINE = {
+    "tick": "for each event: call on_press(event), then return world_state_summary()",
+}
+
+
+def hson_on_press(event: dict):
+    """HSON rule: play tone, send validator ping, fuse on core."""
+    nodes = {n["id"]: n for n in HSON_WORLD["instrument"]["nodes"]}
+    orb = nodes.get(event.get("target"))
+    if orb is None:
+        return {"ping": None}
+    ping = {
+        "source_player": event.get("actor"),
+        "orb_id": orb["id"],
+        "element": orb["color"],
+        "time": event.get("t"),
+    }
+    if orb["id"] == "orb_core":
+        event_extra = ["fuse_lineages(moonstone, jade)", "spawn_visual(fractal_bloom, center_of(tree_360))"]
+        ping["fusion"] = event_extra
+    return {"sound": orb["tone"], "ping": ping}
+
+
+def hson_run():
+    """Run the HSON event sequence end to end."""
+    results = []
+    for ev in HSON_EVENTS:
+        results.append(hson_on_press(ev))
+    return results
+
+
+# =============================================================
+# SECTION 3 : DSONd (Disharmonic Overlay / Chaos Layer)
+# =============================================================
+
+DSOND_SESSION = {
+    "id": "moonstone_jade_tree360_dsond",
+    "mode": "4D_tree_instrument_flat",
+    "context": [
+        "animeotakugirl_fractal",
+        "sovereign_orbs_unified",
+        "dudeist_mutation_active",
+    ],
+    "career_ref": {
+        "world_id": "Moonstone_Jade_4D_Tree_Session",
+        "instrument_id": "tree_360",
+        "players": ["moonstone", "jade"],
+        "sovereign_orbs": [
+            "material",
+            "elemental",
+            "ancestral",
+            "conceptual",
+            "instrumental",
+            "etheric",
+            "sovereign_core",
+        ],
+    },
+    "global_noise": {
+        "detune_field": 0.07,
+        "phase_noise": 0.14,
+        "glitch_prob": 0.09,
+        "desync_with": ["material", "instrumental"],
+        "break_mode": "soft_clipping",
+        "decay_noise": 0.12,
+        "discord_id": "tree360_soft_chaos",
+        "chaotic_carrier": "dudeist_brownian_lounge",
+    },
+    "nodes": {
+        "orb_m1": {
+            "side": "moonstone",
+            "sovereign_lane": "material",
+            "base_tone": "low_chime",
+            "detune_field": 0.03,
+            "phase_noise": 0.08,
+            "glitch_prob": 0.05,
+            "desync_with": ["instrumental"],
+            "break_mode": "click_pop",
+            "decay_noise": 0.10,
+            "discord_id": "moonstone_low_chime_warp",
+            "chaotic_carrier": "subsurface_moonstone_grain",
+        },
+        "orb_m2": {
+            "side": "moonstone",
+            "sovereign_lane": "conceptual",
+            "base_tone": "mid_chime",
+            "detune_field": -0.02,
+            "phase_noise": 0.11,
+            "glitch_prob": 0.06,
+            "desync_with": ["ancestral"],
+            "break_mode": "time_smear",
+            "decay_noise": 0.15,
+            "discord_id": "moonstone_mid_smear",
+            "chaotic_carrier": "thought_wobble_moonstone",
+        },
+        "orb_j1": {
+            "side": "jade",
+            "sovereign_lane": "elemental",
+            "base_tone": "soft_bell",
+            "detune_field": 0.01,
+            "phase_noise": 0.05,
+            "glitch_prob": 0.04,
+            "desync_with": ["etheric"],
+            "break_mode": "ghost_double",
+            "decay_noise": 0.09,
+            "discord_id": "jade_soft_echo",
+            "chaotic_carrier": "jade_rain_resonance",
+        },
+        "orb_j2": {
+            "side": "jade",
+            "sovereign_lane": "instrumental",
+            "base_tone": "bright_bell",
+            "detune_field": -0.04,
+            "phase_noise": 0.17,
+            "glitch_prob": 0.12,
+            "desync_with": ["material", "conceptual"],
+            "break_mode": "stutter_fragment",
+            "decay_noise": 0.20,
+            "discord_id": "jade_bright_stutter",
+            "chaotic_carrier": "toolline_static_jade",
+        },
+        "orb_core": {
+            "side": "shared",
+            "sovereign_lane": "sovereign_core",
+            "base_tone": "harmonic_blend",
+            "detune_field": 0.00,
+            "phase_noise": 0.03,
+            "glitch_prob": 0.02,
+            "desync_with": [],
+            "break_mode": "bloom_overdrive",
+            "decay_noise": 0.25,
+            "discord_id": "fusion_bloom_center",
+            "chaotic_carrier": "fractal_tree_360_spin",
+        },
+    },
+    "players": {
+        "moonstone": {
+            "detune_bias": -0.01,
+            "phase_bias": -0.05,
+            "glitch_tolerance": 0.6,
+            "desync_with": ["jade"],
+            "break_mode_preference": "time_smear",
+            "discord_id": "moonstone_chill_detune",
+            "chaotic_carrier": "inner_tide",
+        },
+        "jade": {
+            "detune_bias": 0.02,
+            "phase_bias": 0.04,
+            "glitch_tolerance": 0.4,
+            "desync_with": ["moonstone"],
+            "break_mode_preference": "stutter_fragment",
+            "discord_id": "jade_curiosity_crackle",
+            "chaotic_carrier": "leaf_flicker",
+        },
+    },
+    "sovereign_overlays": {
+        "material": {
+            "detune_field": 0.05,
+            "phase_noise": 0.10,
+            "glitch_prob": 0.06,
+            "desync_with": ["instrumental"],
+            "break_mode": "body_jerk",
+            "decay_noise": 0.18,
+            "discord_id": "matter_creak",
+            "chaotic_carrier": "rusted_clockwork",
+        },
+        "elemental": {
+            "detune_field": 0.02,
+            "phase_noise": 0.14,
+            "glitch_prob": 0.08,
+            "desync_with": ["etheric"],
+            "break_mode": "spark_spray",
+            "decay_noise": 0.22,
+            "discord_id": "storm_static",
+            "chaotic_carrier": "thunder_mist",
+        },
+        "ancestral": {
+            "detune_field": 0.01,
+            "phase_noise": 0.09,
+            "glitch_prob": 0.05,
+            "desync_with": ["conceptual"],
+            "break_mode": "memory_skip",
+            "decay_noise": 0.30,
+            "discord_id": "lineage_echo",
+            "chaotic_carrier": "family_reverb",
+        },
+        "conceptual": {
+            "detune_field": 0.07,
+            "phase_noise": 0.16,
+            "glitch_prob": 0.11,
+            "desync_with": ["material"],
+            "break_mode": "logic_dropout",
+            "decay_noise": 0.28,
+            "discord_id": "idea_flicker",
+            "chaotic_carrier": "meme_brownian",
+        },
+        "instrumental": {
+            "detune_field": 0.04,
+            "phase_noise": 0.18,
+            "glitch_prob": 0.13,
+            "desync_with": ["material", "elemental"],
+            "break_mode": "interface_glitch",
+            "decay_noise": 0.19,
+            "discord_id": "tool_jitter",
+            "chaotic_carrier": "ritual_feedback",
+        },
+        "etheric": {
+            "detune_field": 0.03,
+            "phase_noise": 0.20,
+            "glitch_prob": 0.09,
+            "desync_with": ["elemental"],
+            "break_mode": "fadeout_drift",
+            "decay_noise": 0.35,
+            "discord_id": "ghost_shimmer",
+            "chaotic_carrier": "dream_hiss",
+        },
+        "sovereign_core": {
+            "detune_field": 0.00,
+            "phase_noise": 0.05,
+            "glitch_prob": 0.03,
+            "desync_with": [],
+            "break_mode": "whiteout_bloom",
+            "decay_noise": 0.40,
+            "discord_id": "great_abider_flux",
+            "chaotic_carrier": "dudeist_vacuum_hum",
+        },
+    },
+}
+
+
+def dsond_combined_fields(event: dict):
+    """Combine global + orb + player + sovereign noise fields for an event."""
+    node = DSOND_SESSION["nodes"].get(event.get("target"))
+    player = DSOND_SESSION["players"].get(event.get("actor"))
+    if node is None or player is None:
+        return None
+
+    sov = DSOND_SESSION["sovereign_overlays"].get(node["sovereign_lane"], {})
+    glob = DSOND_SESSION["global_noise"]
+
+    combined_detune = (
+        glob["detune_field"]
+        + node["detune_field"]
+        + player["detune_bias"]
+        + sov.get("detune_field", 0.0)
+    )
+    combined_phase_noise = (
+        glob["phase_noise"]
+        + node["phase_noise"]
+        + player["phase_bias"]
+        + sov.get("phase_noise", 0.0)
+    )
+    combined_glitch_prob = (
+        glob["glitch_prob"]
+        + node["glitch_prob"]
+        + sov.get("glitch_prob", 0.0)
+    )
+
+    glitch_roll = random.random()
+    is_glitch = glitch_roll < combined_glitch_prob
+
+    return {
+        "actor": event.get("actor"),
+        "orb_id": event.get("target"),
+        "lane": node["sovereign_lane"],
+        "combined_detune": combined_detune,
+        "combined_phase_noise": combined_phase_noise,
+        "combined_glitch_prob": combined_glitch_prob,
+        "is_glitch": is_glitch,
+        "break_mode": node["break_mode"] if is_glitch else None,
+        "discord_id": node["discord_id"],
+        "carrier": node["chaotic_carrier"] if not is_glitch else sov.get("break_mode"),
+    }
+
+
+def dsond_run(seed: int = None):
+    """Simulate the full DSONd event sequence with glitch resolution."""
+    if seed is not None:
+        random.seed(seed)
+    results = []
+    for ev in HSON_EVENTS:
+        results.append(dsond_combined_fields(ev))
+    return results
+
+
+# =============================================================
+# SECTION 4 : MATH42 (Public-Domain 42-Based Transforms)
+# =============================================================
+
+FORBIDDEN = 42  # the constant
+
+
+def deg42():
+    return math.radians(FORBIDDEN)  # 7 * pi / 30
+
+
+def pow42():
+    """
+    42^(1 degree) as the disharmonic scaling factor.
+    = 42^(pi/180) ~= 1.0837
+    """
+    return FORBIDDEN ** (math.pi / 180.0)
+
+
+def mod42(x):
+    return x % FORBIDDEN
+
+
+def scale42(x):
+    return FORBIDDEN * x
+
+
+def root42(x):
+    return x ** (1.0 / FORBIDDEN)
+
+
+def branch_angle():
+    return 360.0 / FORBIDDEN  # ~8.571428 degrees
+
+
+def harmonic_tone(f0, n):
+    """42-tone equal temperament: f0 * 2^(n/42)."""
+    return f0 * (2 ** (n / FORBIDDEN))
+
+
+def sovereign_angle(n):
+    return FORBIDDEN * n
+
+
+SOVEREIGN_ORDER = [
+    "Material",
+    "Elemental",
+    "Ancestral",
+    "Conceptual",
+    "Instrumental",
+    "Etheric",
+    "Sovereign_Core",
+]
+
+SOVEREIGN_ANGLES = {
+    name: sovereign_angle(i)
+    for i, name in enumerate(SOVEREIGN_ORDER)
+}
+
+
+def chemo42_species():
+    """42-state Chemo-SN species cycle: A0..A41 -> A0."""
+    return {
+        "id": "A",
+        "shape": "42_cycle",
+        "states": [
+            {"id": f"A_{i}", "energy": float(i)} for i in range(FORBIDDEN)
+        ],
+    }
+
+
+# =============================================================
+# SECTION 5 : THE (Unified Root Construct)
+# =============================================================
+
+class The:
+    """
+    The Root Namespace
+    - Holds all layers
+    - Provides unified access
+    - Serves as the meta-context for Chemo-SN, HSON, DSONd, and the 4D Tree
+    """
+
+    def __init__(self):
+        self.chemo = None
+        self.hson = None
+        self.dsond = None
+        self.tree = None
+        self.agents = {}
+        self.sovereign_orbs = {}
+        self.math42 = {}
+
+    def bind(self, **layers):
+        for k, v in layers.items():
+            setattr(self, k, v)
+
+
+species_The = {
+    "id": "THE",
+    "shape": "42_cycle",
+    "states": [
+        {"id": f"THE_{i}", "energy": i * 42} for i in range(42)
+    ],
+}
+
+THE_CONSTANT = {
+    "constant": 42,
+    "angle": 42 * (math.pi / 180),
+    "cycle": list(range(42)),
+    "meaning": "the binding layer of all systems",
+    "applies_to": [
+        "Chemo-SN",
+        "HSON",
+        "DSONd",
+        "4D_Tree",
+        "Moonstone",
+        "Jade",
+        "Sovereign_Orbs",
+    ],
+}
+
+dsond_The = {
+    "id": "THE",
+    "detune_field": 0.42,
+    "phase_noise": 0.042,
+    "glitch_prob": 1 / 42,
+    "break_mode": "soft_bloom",
+    "discord_id": "the_root",
+    "chaotic_carrier": "universal_hum",
+}
+
+hson_The = {
+    "id": "THE",
+    "role": "root_archetype",
+    "lane": "sovereign_core",
+    "symbol": "the_origin",
+    "interacts_with": ["moonstone", "jade", "tree_360"],
+}
+
+tree_core = {
+    "id": "THE",
+    "type": "core_blossom",
+    "angle": 0,
+    "radius": 0,
+    "orb": "core",
+    "effect": "fusion_event",
+}
+
+# The unified root object spanning all layers
+THE = {
+    "namespace": {
+        "chemo": "runtime_core",
+        "hson": "harmonic_layer",
+        "dsond": "disharmonic_layer",
+        "tree": "instrument_360",
+        "agents": {"moonstone", "jade"},
+        "sovereign_orbs": "all_orbs",
+        "math42": "universal_constants",
+    },
+    "species": species_The,
+    "constant": 42,
+    "angle": math.radians(42),  # 7 * pi / 30
+    "cycle": list(range(42)),
+    "disharmonic": dsond_The,
+    "harmonic": hson_The,
+    "tree_core": tree_core,
+}
+
+
+def build_the() -> The:
+    """Assemble the live The namespace wiring real layers in."""
+    t = The()
+    t.bind(
+        chemo=ChemoSimulator(CHEMO_SN_SPEC),
+        hson=HSON_WORLD,
+        dsond=DSOND_SESSION,
+        tree=HSON_WORLD["instrument"],
+        agents={"moonstone", "jade"},
+        sovereign_orbs=list(SOVEREIGN_ORDER),
+        math42=THE_CONSTANT,
+    )
+    return t
+
+
+# =============================================================
+# ENTRY POINT
+# =============================================================
+
+if __name__ == "__main__":
+    print("=== CHEMNO-SN ===")
+    sim = ChemoSimulator(CHEMO_SN_SPEC)
+    result = sim.run(steps=10)
+    print("final_state:", result["final_state"])
+    print("transitions:", len(result["log"]))
+    print()
+
+    print("=== HSON ===")
+    run_out = hson_run()
+    for r in run_out:
+        print("  ", r)
+    print("engine:", HSON_ENGINE["tick"])
+    print()
+
+    print("=== DSONd ===")
+    for r in dsond_run(seed=1):
+        print("  ", r)
+    print()
+
+    print("=== MATH42 ===")
+    print("  42 deg  (rad):", round(deg42(), 6))
+    print("  42^deg (rad): ", round(pow42(), 6))
+    print("  branch angle :", round(branch_angle(), 6))
+    print("  tone n=1     :", round(harmonic_tone(440.0, 1), 4))
+    print("  sovereign angles:", {k: SOVEREIGN_ANGLES[k] for k in list(SOVEREIGN_ANGLES)[:3]})
+    print("  42-species states:", len(chemo42_species()["states"]))
+    print()
+
+    print("=== THE ===")
+    the = build_the()
+    print("  namespace keys:", sorted(k for k in the.__dict__ if the.__dict__[k] is not None))
+    print("  THE.species states:", len(THE["species"]["states"]))
+    print("  THE.constant:", THE["constant"])
+    print("  THE.angle rad:", round(THE["angle"], 6))
+    print("  THE.disharmonic:", THE["disharmonic"])
+    print("  THE.harmonic:", THE["harmonic"])
+    print("  THE.tree_core:", THE["tree_core"])
+    print()
+    print("FRESH COMPILE COMPLETE - all layers merged, collaborator names redacted")
