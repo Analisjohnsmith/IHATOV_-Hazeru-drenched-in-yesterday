@@ -1,3 +1,21 @@
+# --- Attribution ---
+dreambank_attr = (
+    "\n================================================================================\n"
+    "ATTRIBUTION\n"
+    "================================================================================\n"
+    "Dream reports sourced from DreamBank corpus:\n"
+    "https://www.dreambank.net\n"
+    "Created by G. William Domhoff and colleagues.\n"
+    "Corpus includes 25,000+ public dream narratives, many coded with Hall–Van de Castle system.\n"
+    "================================================================================\n"
+)
+
+output_lines.append(dreambank_attr.rstrip())
+# Attribution
+
+Dream reports are sourced from the [DreamBank corpus](https://www.dreambank.net),  
+curated by G. William Domhoff and colleagues.  
+The dataset contains 25,000+ public dream narratives, many annotated using the Hall–Van de Castle coding system.
 
 ```python
 #!/usr/bin/env python3
