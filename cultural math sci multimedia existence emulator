@@ -48,6 +48,1536 @@ Lila object can account for and unify structures across scales — atoms, biolog
 
 Right now, I can realistically reach ~90–95% fidelity atom‑to‑atom, and about ~80% explanatory coverage atom‑to‑star. To push toward 100%, you’ll need explicit predictive equations and empirical validation,
 the same way Newton’s gravity became complete when it predicted planetary motion. this is one thing i  owwn.
+#!/usr/bin/env python3
+"""
+EXECUTABLE CINEMA — A Trip to the Moon + Felix the Cat
+=======================================================
+No text. No titles. No dialogue. Pure visual storytelling.
+Every frame is f(t). No stored pixels. Deterministic.
+
+Scenes:
+  1. Felix walks through 1920s city
+  2. Felix in attic — finds telescope, sees Moon
+  3. professors plan expedition (blackboard, table)
+  4. Cannon launch — flame, smoke, capsule flies
+  5. Space — Felix floats, stars stream, comet passes
+  6. Impact — capsule hits Moon in the eye
+  7. Lunar surface — Felix walks, plants flag, Earth in sky
+  8. Felix waves goodbye from the Moon
+"""
+
+import argparse
+import math
+import subprocess
+from dataclasses import dataclass
+from typing import List
+
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle, Ellipse, Rectangle, Polygon
+
+
+@dataclass
+class FilmConfig:
+    width: int = 480
+    height: int = 480
+    fps: int = 12
+    duration: float = 28.0
+    output: str = "trip_felix_moon.gif"
+    seed: int = 42
+
+    @property
+    def total_frames(self) -> int:
+        return int(self.duration * self.fps)
+
+
+class Narrative:
+    def __init__(self, cfg: FilmConfig):
+        self.cfg = cfg
+        self.felix_x = 0.5
+        self.felix_y = 3.5
+        self.felix_phase = 0.0
+        self.felix_state = "walking"
+        self.capsule_x = 3.0
+        self.capsule_y = 3.5
+        self.capsule_state = "grounded"
+        self.look_angle = 0.0
+        self.impact_done = False
+        self.impact_time = 0.0
+
+    def phase(self, t: float) -> str:
+        d = self.cfg.duration
+        if t < d * 0.18:      return "city"
+        elif t < d * 0.30:    return "attic"
+        elif t < d * 0.42:    return "congress"
+        elif t < d * 0.55:    return "launch"
+        elif t < d * 0.72:    return "space"
+        elif t < d * 0.85:    return "impact"
+        elif t < d * 0.95:    return "surface"
+        else:                 return "wave"
+
+    def update(self, t: float, dt: float):
+        p = self.phase(t)
+        self.felix_phase = t
+        d = self.cfg.duration
+
+        if p == "city":
+            self.felix_x += 0.1 * dt * 12
+            if self.felix_x > 10.5:
+                self.felix_x = -0.5
+            self.felix_y = 3.5
+            self.felix_state = "walking"
+
+        elif p == "attic":
+            self.felix_x = 3.0
+            self.felix_y = 3.5
+            self.felix_state = "looking"
+            self.look_angle = (t - d * 0.18) / (d * 0.12)
+
+        elif p == "congress":
+            self.felix_x = 1.5
+            self.felix_y = 3.5
+            self.felix_state = "standing"
+
+        elif p == "launch":
+            lt = (t - d * 0.42) / (d * 0.13)
+            if lt < 0.4:
+                self.capsule_x = 5.5
+                self.capsule_y = 5.5
+                self.capsule_state = "loaded"
+            elif lt < 0.5:
+                self.capsule_state = "firing"
+            else:
+                self.capsule_state = "flying"
+                ft = (lt - 0.5) / 0.5
+                self.capsule_x = 5.5 + ft * 8.0
+                self.capsule_y = 5.5 + ft * 6.0
+
+        elif p == "space":
+            self.felix_x = 5.0 + 0.3 * math.sin(t * 0.8)
+            self.felix_y = 5.0 + 0.4 * math.cos(t * 1.1)
+            self.felix_state = "floating"
+            self.capsule_x = self.felix_x + 1.8
+            self.capsule_y = self.felix_y - 0.5
+
+        elif p == "impact":
+            it = (t - d * 0.72) / (d * 0.13)
+            if it < 0.6:
+                self.capsule_state = "approaching"
+                ap = it / 0.6
+                self.capsule_x = -1 + ap * 6.5
+                self.capsule_y = 9 - ap * 3.0
+                self.impact_done = False
+            else:
+                self.capsule_state = "embedded"
+                self.capsule_x = 5.5
+                self.capsule_y = 5.6
+                if not self.impact_done:
+                    self.impact_done = True
+                    self.impact_time = t
+                self.felix_x = 5.5
+                self.felix_y = 6.0
+                self.felix_state = "popping_out"
+
+        elif p == "surface":
+            surf_t = (t - d * 0.85) / (d * 0.10)
+            self.felix_x = 4.0 + surf_t * 3.0
+            self.felix_y = 3.0
+            self.felix_state = "moon_walk"
+            self.capsule_x = 8.5
+            self.capsule_y = 2.8
+            self.capsule_state = "landed"
+
+        elif p == "wave":
+            self.felix_x = 5.0
+            self.felix_y = 3.5
+            self.felix_state = "waving"
+
+
+class Renderer:
+    def __init__(self, cfg: FilmConfig):
+        self.cfg = cfg
+        self.rng = np.random.default_rng(cfg.seed)
+        self._star_cache = None
+        self._building_cache = None
+
+    def _grain(self, ax, n=60, intens=0.04):
+        for _ in range(n):
+            x, y = self.rng.uniform(0, 10), self.rng.uniform(0, 10)
+            b = self.rng.uniform(0, intens)
+            ax.plot(x, y, '.', color=str(b), markersize=1, alpha=0.4)
+
+    def _stars(self, ax, n=90):
+        if self._star_cache is None:
+            r = np.random.default_rng(42)
+            self._star_cache = [(r.uniform(0, 10), r.uniform(0, 10),
+                            r.uniform(0.2, 1.0)) for _ in range(n)]
+        for sx, sy, sb in self._star_cache:
+            ax.plot(sx, sy, '.', color='white', markersize=sb * 1.5, alpha=sb)
+
+    def _felix(self, ax, x, y, phase, state="walking", s=1.0):
+        # Body
+        ax.add_patch(Ellipse((x, y), 1.0*s, 1.4*s, color='black'))
+        # Head
+        ax.add_patch(Circle((x, y + 1.0*s), 0.5*s, color='black'))
+        # Ears
+        for side in [-1, 1]:
+            ax.add_patch(Polygon([
+                (x + side*0.3*s, y + 1.3*s),
+                (x + side*0.15*s, y + 1.9*s),
+                (x, y + 1.3*s)
+            ], color='black'))
+        # Eyes
+        for side in [-1, 1]:
+            ex = x + side*0.17*s
+            ey = y + 1.1*s
+            ax.add_patch(Circle((ex, ey), 0.12*s, color='white'))
+            pup = 0.02*s*math.sin(phase*3)
+            ax.add_patch(Circle((ex+pup, ey), 0.05*s, color='black'))
+        # Mouth
+        mx = np.linspace(x - 0.1*s, x + 0.1*s, 12)
+        my = y + 0.85*s + 0.03*s*np.sin(np.linspace(0, np.pi, 12))
+        ax.plot(mx, my, 'white', linewidth=1.2)
+
+        if state == "walking":
+            lp = phase * 5
+            for i, sg in enumerate([-1, 1]):
+                sw = 0.25*s*math.sin(lp + i*math.pi)
+                kx = x + sg*0.2*s + sw*0.4
+                ky = y - 0.7*s
+                fx2 = kx + sw*0.3
+                fy2 = y - 1.2*s
+                ax.plot([x+sg*0.15*s, kx], [y-0.5*s, ky], 'black', linewidth=2.5*s)
+                ax.plot([kx, fx2], [ky, fy2], 'black', linewidth=2.5*s)
+            for i, sg in enumerate([-1, 1]):
+                asw = 0.2*s*math.sin(lp + i*math.pi + 0.5)
+                hx = x + sg*0.6*s + asw
+                hy = y + 0.2*s + asw*0.3
+                ax.plot([x+sg*0.4*s, hx], [y+0.1*s, hy], 'black', linewidth=2.5*s)
+
+        elif state == "looking":
+            ax.plot([x+0.3*s, x+1.0*s], [y+0.3*s, y+1.2*s], 'black', linewidth=2.5*s)
+            ax.add_patch(Circle((x+1.0*s, y+1.2*s), 0.08*s, color='black'))
+            ax.plot([x-0.3*s, x-0.5*s], [y+0.3*s, y-0.1*s], 'black', linewidth=2.5*s)
+            for sg in [-1, 1]:
+                ax.plot([x+sg*0.15*s, x+sg*0.2*s], [y-0.5*s, y-1.2*s], 'black', linewidth=2.5*s)
+
+        elif state == "floating":
+            for sg in [-1, 1]:
+                aa = phase*1.5 + sg*0.5
+                ax.plot([x, x+sg*0.8*s*math.cos(aa)],
+                       [y+0.2*s, y+0.5*s+0.3*s*math.sin(aa)], 'black', linewidth=2.5*s)
+                la = phase*1.2 + sg*0.8
+                ax.plot([x, x+sg*0.5*s*math.cos(la)],
+                       [y-0.5*s, y-0.8*s+0.3*s*math.sin(la)], 'black', linewidth=2.5*s)
+
+        elif state == "moon_walk":
+            lp = phase * 3
+            for i, sg in enumerate([-1, 1]):
+                sw = 0.35*s*math.sin(lp + i*math.pi)
+                kx = x + sg*0.2*s + sw*0.5
+                ky = y - 0.7*s
+                fx2 = kx + sw*0.4
+                fy2 = y - 1.3*s
+                ax.plot([x+sg*0.15*s, kx], [y-0.5*s, ky], 'black', linewidth=2.5*s)
+                ax.plot([kx, fx2], [ky, fy2], 'black', linewidth=2.5*s)
+            for sg in [-1, 1]:
+                ax.plot([x+sg*0.3*s, x+sg*0.7*s],
+                       [y+0.2*s, y+0.7*s+0.1*s*math.sin(phase*4)], 'black', linewidth=2.5*s)
+
+        elif state == "standing":
+            for sg in [-1, 1]:
+                ax.plot([x+sg*0.15*s, x+sg*0.2*s], [y-0.5*s, y-1.2*s], 'black', linewidth=2.5*s)
+                ax.plot([x+sg*0.3*s, x+sg*0.4*s], [y+0.2*s, y-0.1*s], 'black', linewidth=2.5*s)
+
+        elif state == "popping_out":
+            # Felix emerging from capsule
+            ax.plot([x-0.3*s, x-0.3*s], [y-0.5*s, y+0.3*s], 'black', linewidth=2.5*s)
+            ax.plot([x+0.3*s, x+0.3*s], [y-0.5*s, y+0.3*s], 'black', linewidth=2.5*s)
+            for sg in [-1, 1]:
+                ax.plot([x+sg*0.3*s, x+sg*0.6*s],
+                       [y+0.3*s, y+0.8*s+0.1*s*math.sin(phase*4)], 'black', linewidth=2.5*s)
+
+        elif state == "waving":
+            for sg in [-1, 1]:
+                ax.plot([x+sg*0.15*s, x+sg*0.2*s], [y-0.5*s, y-1.2*s], 'black', linewidth=2.5*s)
+            # Arms up waving
+            for sg in [-1, 1]:
+                wave = 0.3*s*math.sin(phase*5)
+                ax.plot([x+sg*0.3*s, x+sg*0.7*s],
+                       [y+0.3*s, y+1.0*s+wave], 'black', linewidth=2.5*s)
+                ax.add_patch(Circle((x+sg*0.7*s, y+1.0*s+wave), 0.08*s, color='black'))
+
+    # ── Scene: City Street ──
+    def city(self, t, nar):
+        fig, ax = plt.subplots(figsize=(4,4), dpi=100)
+        fig.patch.set_facecolor('#e8e0d0')
+        ax.set_xlim(0,10); ax.set_ylim(0,10); ax.axis('off')
+
+        for y in np.linspace(8,10,6):
+            ax.axhspan(y, y+0.3, color='#87CEEB', alpha=(y-8)/2*0.3)
+
+        if self._building_cache is None:
+            r = np.random.default_rng(55)
+            self._building_cache = []
+            bx = 0
+            while bx < 10:
+                bw = r.uniform(1.2, 2.2)
+                bh = r.uniform(4.5, 7.0)
+                self._building_cache.append((bx, bw, bh, r.choice(['#4a4a5a','#5a5a6a','#3a3a4a','#4a4050'])))
+                bx += bw + r.uniform(0.0, 0.15)
+
+        for bx, bw, bh, bc in self._building_cache:
+            ax.add_patch(Rectangle((bx, 3.0), bw, bh, color=bc))
+            for wy in np.arange(3.3, 3.0+bh-0.3, 0.5):
+                for wx in np.arange(bx+0.2, bx+bw-0.1, 0.4):
+                    lit = self.rng.random() > 0.3
+                    ax.add_patch(Rectangle((wx, wy), 0.2, 0.3,
+                               color='#ffee88' if lit else '#2a2a3a', alpha=0.8))
+            ax.plot([bx, bx+bw], [3.0+bh, 3.0+bh], '#2a2a3a', linewidth=2)
+
+        ax.fill_between([0,10], [0,0], [3.0,3.0], color='#8a8070')
+        ax.plot([0,10], [3.0,3.0], color='#6a6050', linewidth=2)
+        for cx2 in np.arange(0,10,0.6):
+            for cy2 in np.arange(0.2,2.8,0.4):
+                off = 0.3*(int(cy2*10)%2)
+                ax.add_patch(Rectangle((cx2+off, cy2), 0.25, 0.15, color='#7a7060', alpha=0.4))
+
+        ax.plot([8.5,8.5], [3.0,5.5], '#2a2a2a', linewidth=3)
+        ax.plot([8.2,8.8], [5.5,5.5], '#2a2a2a', linewidth=2)
+        ax.add_patch(Circle((8.5,5.7), 0.2, color='#ffee88', alpha=0.8))
+        ax.add_patch(Circle((8.5,5.7), 0.35, color='#ffee88', alpha=0.12))
+
+        self._felix(ax, nar.felix_x, nar.felix_y, nar.felix_phase, "walking")
+        self._grain(ax, 50, 0.03)
+        return fig
+
+    # ── Scene: Attic + Telescope ──
+    def attic(self, t, nar):
+        fig, ax = plt.subplots(figsize=(4,4), dpi=100)
+        fig.patch.set_facecolor('#3a2a1a')
+        ax.set_xlim(0,10); ax.set_ylim(0,10); ax.axis('off')
+
+        for y in np.arange(0,10,0.8):
+            c = '#4a3a2a' if int(y*10)%2==0 else '#3a2a1a'
+            ax.axhspan(y, y+0.8, color=c, alpha=0.5)
+        ax.fill_between([0,10], [0,0], [2.5,2.5], color='#5a4a3a')
+
+        # Round window with stars + moon
+        ax.add_patch(Circle((7.5,6.5), 1.2, color='#0a0a2a'))
+        for _ in range(12):
+            sx2 = 7.5 + self.rng.uniform(-1.0,1.0)
+            sy2 = 6.5 + self.rng.uniform(-1.0,1.0)
+            if (sx2-7.5)**2+(sy2-6.5)**2 < 1.0:
+                ax.plot(sx2, sy2, '.', color='white', markersize=1.5)
+        ax.add_patch(Circle((8.2,7.2), 0.3, color='#e8e8d0', alpha=0.7))
+
+        # Telescope
+        tx2, ty2 = 6.5, 3.0
+        ax.plot([tx2,tx2-0.5], [ty2,2.5], '#5a4a3a', linewidth=2)
+        ax.plot([tx2,tx2+0.5], [ty2,2.5], '#5a4a3a', linewidth=2)
+        ax.plot([tx2,tx2], [ty2,2.5], '#5a4a3a', linewidth=2)
+        ta = math.atan2(6.5-ty2, 7.5-tx2)
+        tl = 2.0
+        ttip_x = tx2 + tl*math.cos(ta)
+        ttip_y = ty2 + tl*math.sin(ta)
+        ax.plot([tx2,ttip_x], [ty2,ttip_y], '#6a5a4a', linewidth=5, solid_capstyle='round')
+        shimmer = 0.3*math.sin(t*3)
+        ax.add_patch(Circle((ttip_x,ttip_y), 0.15, color='#8ab', alpha=0.5))
+        ax.add_patch(Circle((ttip_x,ttip_y), 0.25+shimmer*0.05, color='white', alpha=0.1+shimmer*0.05))
+
+        # Bookshelf
+        for by2 in [3.5, 4.2, 4.9]:
+            ax.plot([0.3,2.5], [by2,by2], '#5a4a3a', linewidth=2)
+            for bx2 in np.arange(0.4,2.4,0.3):
+                bc2 = '#8a2a2a' if self.rng.random()>0.5 else '#2a2a6a'
+                ax.add_patch(Rectangle((bx2,by2+0.05), 0.2, 0.5, color=bc2, alpha=0.7))
+
+        self._felix(ax, nar.felix_x, nar.felix_y, nar.felix_phase, "looking")
+        self._grain(ax, 50, 0.04)
+        return fig
+
+    # ── Scene: Congress ──
+    def congress(self, t, nar):
+        fig, ax = plt.subplots(figsize=(4,4), dpi=100)
+        fig.patch.set_facecolor('#2a2a3a')
+        ax.set_xlim(0,10); ax.set_ylim(0,10); ax.axis('off')
+
+        ax.fill_between([0,10], [0,0], [3.0,3.0], color='#1a1a2a')
+        ax.add_patch(Rectangle((1.5,3.5), 7.0, 0.3, color='#5a4a3a'))
+        for tx3 in [2.0, 4.5, 7.0]:
+            ax.plot([tx3,tx3], [3.5,3.0], '#5a4a3a', linewidth=3)
+
+        # Blackboard
+        ax.add_patch(Rectangle((2.0,5.5), 6.0, 3.0, color='#1a3a1a'))
+        ax.plot([2.0,8.0], [5.5,5.5], '#4a4a4a', linewidth=1)
+        ax.plot([2.0,8.0], [8.5,8.5], '#4a4a4a', linewidth=1)
+        prog = (t - self.cfg.duration*0.30) / (self.cfg.duration*0.12)
+        for i in range(min(int(prog*6)+1, 5)):
+            y2 = 6.0 + i*0.45
+            xs2 = np.linspace(2.5, 7.5, 50)
+            ys2 = y2 + 0.1*np.sin(xs2*3 + i*2)
+            ax.plot(xs2, ys2, '#aaaaaa', linewidth=0.8, alpha=0.6)
+        ax.add_patch(Circle((5.5,7.2), 0.6, color='#e8e8d0', alpha=0.4))
+        ax.plot([4.9,6.1], [7.2,7.2], '#1a3a1a', linewidth=1)
+        ax.plot([5.5,5.5], [6.6,7.8], '#1a3a1a', linewidth=1)
+
+        profs = [(3.0,4.0),(5.0,4.0),(7.0,4.0)]
+        for px3, py3 in profs:
+            ax.add_patch(Rectangle((px3-0.3,py3-0.8), 0.6, 1.0, color='#1a1a2a'))
+            ax.add_patch(Circle((px3,py3+0.3), 0.25, color='#1a1a2a'))
+            ax.add_patch(Rectangle((px3-0.3,py3+0.5), 0.6, 0.15, color='#0a0a1a'))
+            ax.plot([px3,px3+0.4], [py3-0.2,py3-0.4], '#1a1a2a', linewidth=2)
+            ax.plot([px3,px3-0.4], [py3-0.2,py3-0.4], '#1a1a2a', linewidth=2)
+
+        self._felix(ax, nar.felix_x, nar.felix_y, nar.felix_phase, "standing", s=0.9)
+
+        cx3 = 4.5
+        ax.plot([cx3,cx3], [3.8,4.3], '#e8e8d0', linewidth=2)
+        flicker = 0.1*math.sin(t*8)
+        ax.add_patch(Circle((cx3,4.4+flicker), 0.1, color='#ffaa33', alpha=0.8))
+        ax.add_patch(Circle((cx3,4.4+flicker), 0.2, color='#ffaa33', alpha=0.12))
+
+        self._grain(ax, 50, 0.04)
+        return fig
+
+    # ── Scene: Launch ──
+    def launch(self, t, nar):
+        fig, ax = plt.subplots(figsize=(4,4), dpi=100)
+        fig.patch.set_facecolor('#0a0a1a')
+        ax.set_xlim(0,10); ax.set_ylim(0,10); ax.axis('off')
+        self._stars(ax, 100)
+
+        ax.fill_between([0,10], [0,0], [2.8,2.8], color='#1a1a1a')
+
+        cbx, cby = 2.5, 2.8
+        ca, cl = 0.75, 3.0
+        ctx = cbx + cl*math.cos(ca)
+        cty = cby + cl*math.sin(ca)
+        ax.plot([cbx,ctx], [cby,cty], '#333', linewidth=8, solid_capstyle='round')
+        for wx2 in [cbx-0.3, cbx+0.5]:
+            ax.add_patch(Circle((wx2,2.5), 0.4, color='#222'))
+            ax.add_patch(Circle((wx2,2.5), 0.15, color='#444'))
+
+        # Capsule on cannon before launch, or flying
+        if nar.capsule_state in ("loaded", "firing"):
+            cx4, cy4 = 5.5, 5.5
+            ax.add_patch(Ellipse((cx4,cy4), 0.7, 0.45, angle=42, color='#8B7355'))
+            ax.add_patch(Circle((cx4+0.08,cy4+0.04), 0.08, color='#4a9eff', alpha=0.8))
+            self._felix(ax, cx4-0.05, cy4+0.35, t, "looking", s=0.25)
+        else:
+            cx4, cy4 = nar.capsule_x, nar.capsule_y
+
+        if nar.capsule_state == "firing":
+            for i in range(60):
+                fx2 = ctx + i*0.04
+                fy2 = cty + 0.08*math.sin(i*0.4+t*12)
+                fb = max(0, 1-i/60)
+                c = 'yellow' if fb>0.5 else 'orange' if fb>0.2 else 'red'
+                ax.plot(fx2,fy2, '.', color=c, markersize=2.5, alpha=fb)
+            for i in range(6):
+                sx2 = cbx-0.3+i*0.25
+                sy2 = cby+0.3+i*0.15
+                sr2 = 0.15+0.15
+                ax.add_patch(Circle((sx2,sy2), sr2, color='gray', alpha=max(0, 0.35-0.15)))
+
+        if nar.capsule_state == "flying":
+            ax.add_patch(Ellipse((cx4,cy4), 0.5, 0.3, angle=35, color='#8B7355'))
+            ax.add_patch(Circle((cx4+0.06,cy4+0.03), 0.06, color='#4a9eff', alpha=0.8))
+            self._felix(ax, cx4-0.03, cy4+0.22, t, "looking", s=0.18)
+            for i in range(15):
+                ex2 = cx4-0.4-i*0.08
+                ey2 = cy4+0.03*math.sin(t*6+i*0.4)
+                eb = max(0, 1-i/15)
+                c = 'yellow' if eb>0.5 else 'orange' if eb>0.2 else 'red'
+                ax.plot(ex2,ey2, '.', color=c, markersize=1.5, alpha=eb*0.6)
+
+        for px4 in [1.0, 4.0, 5.5]:
+            ax.add_patch(Rectangle((px4-0.15,2.0), 0.3, 0.8, color='#1a1a2a'))
+            ax.add_patch(Circle((px4,2.95), 0.15, color='#1a1a2a'))
+
+        self._grain(ax, 60, 0.05)
+        return fig
+
+    # ── Scene: Space ──
+    def space(self, t, nar):
+        fig, ax = plt.subplots(figsize=(4,4), dpi=100)
+        fig.patch.set_facecolor('black')
+        ax.set_xlim(0,10); ax.set_ylim(0,10); ax.axis('off')
+
+        rng = np.random.default_rng(42)
+        for i in range(120):
+            sx3 = rng.uniform(0,10)
+            sy3 = rng.uniform(0,10)
+            sp = rng.uniform(0.3,2.5)
+            ln = sp*0.6
+            br = rng.uniform(0.2,1.0)
+            ax.plot([sx3,sx3+ln], [sy3,sy3], 'white', linewidth=0.4, alpha=br*0.5)
+            ax.plot(sx3,sy3, '.', color='white', markersize=br*1.5)
+
+        cp = (t*0.3)%1.0
+        if 0.1<cp<0.7:
+            comet_x = 11-cp*15
+            comet_y = 7+math.sin(cp*8)*1.0
+            ax.add_patch(Circle((comet_x,comet_y), 0.15, color='white'))
+            for dx2 in range(1,12):
+                ta2 = max(0, 1-dx2/12)
+                ax.plot(comet_x+dx2*0.12, comet_y+dx2*0.03, '.', color='white',
+                       markersize=0.8, alpha=ta2*0.4)
+
+        self._felix(ax, nar.felix_x, nar.felix_y, nar.felix_phase, "floating", s=0.8)
+
+        cap = Ellipse((nar.capsule_x,nar.capsule_y), 0.5, 0.3, angle=15, color='#8B7355', alpha=0.7)
+        ax.add_patch(cap)
+
+        for i in range(15):
+            ex3 = nar.capsule_x-0.4-i*0.08
+            ey3 = nar.capsule_y+0.03*math.sin(t*6+i*0.4)
+            eb = max(0, 1-i/15)
+            c = 'yellow' if eb>0.5 else 'orange' if eb>0.2 else 'red'
+            ax.plot(ex3,ey3, '.', color=c, markersize=1.5, alpha=eb*0.6)
+
+        ax.add_patch(Circle((2,8), 1.5, color='#4a2a6a', alpha=0.08))
+        ax.add_patch(Circle((8,3), 1.2, color='#2a4a6a', alpha=0.06))
+
+        self._grain(ax, 70, 0.03)
+        return fig
+
+    # ── Scene: Impact ──
+    def impact(self, t, nar):
+        fig, ax = plt.subplots(figsize=(4,4), dpi=100)
+        fig.patch.set_facecolor('black')
+        ax.set_xlim(0,10); ax.set_ylim(0,10); ax.axis('off')
+
+        mcx, mcy, mr = 5.5, 5.0, 2.5
+        ax.add_patch(Circle((mcx,mcy), mr, color='#e8e8d0'))
+        for ang in np.linspace(0, 2*np.pi, 50):
+            for rf in np.linspace(0,1,4):
+                px5 = mcx+mr*rf*math.cos(ang)
+                py5 = mcy+mr*rf*math.sin(ang)
+                sh = 0.5+0.5*math.cos(ang)
+                ax.plot(px5,py5, '.', color=str(0.25*sh), markersize=1, alpha=0.25)
+
+        elx = mcx-mr*0.35
+        ey5 = mcy+mr*0.1
+        erx = mcx+mr*0.35
+        for ex5 in [elx, erx]:
+            ax.add_patch(Ellipse((ex5,ey5), 0.8, 0.5, color='#2a2a2a'))
+            ax.add_patch(Circle((ex5,ey5), 0.18, color='white'))
+
+        ax.plot([mcx,mcx+0.1], [mcy-mr*0.1, mcy-mr*0.3], '#8a8a70', linewidth=2)
+        my5 = mcy-mr*0.4
+        mx5 = np.linspace(mcx-0.5, mcx+0.5, 30)
+        impact_t = t - self.cfg.duration*0.72
+        mc5 = my5 + (0.1 if impact_t>0 else -0.1)*np.sin(np.linspace(0,np.pi,30))
+        ax.plot(mx5, mc5, '#5a5a4a', linewidth=2)
+
+        if impact_t > 0:
+            dr = 0.2+impact_t*0.6
+            ax.add_patch(Circle((elx,ey5), dr, color='black'))
+            for ang2 in np.linspace(0,2*np.pi,8):
+                ll = dr*1.5
+                ax.plot([elx,elx+ll*math.cos(ang2)], [ey5,ey5+ll*math.sin(ang2)], 'black', linewidth=1.5)
+            if impact_t < 0.5:
+                fr = impact_t*5
+                ax.add_patch(Circle((elx,ey5), fr, color='yellow', alpha=max(0,1-impact_t*2)))
+            self._felix(ax, elx, ey5+0.3, t, "popping_out", s=0.15)
+        elif nar.capsule_state == "approaching":
+            it2 = (t - self.cfg.duration*0.72) / (self.cfg.duration*0.13*0.6)
+            it2 = min(it2, 1.0)
+            cap_x2 = -1+it2*(elx+1)
+            cap_y2 = 9-it2*(9-ey5)
+            ax.add_patch(Ellipse((cap_x2,cap_y2), 0.4, 0.25, angle=30, color='#8B7355'))
+            self._felix(ax, cap_x2-0.05, cap_y2+0.2, t, "standing", s=0.15)
+            for i in range(6):
+                tx4 = cap_x2-i*0.12
+                ty4 = cap_y2+i*0.08
+                ax.plot(tx4,ty4, '.', color='white', markersize=0.8, alpha=0.4*(1-i/6))
+
+        if 0<impact_t<0.8:
+            if int(impact_t*6)%2:
+                ax.set_xlim(0.15,10.15)
+                ax.set_ylim(-0.15,9.85)
+
+        self._grain(ax, 60, 0.05)
+        return fig
+
+    # ── Scene: Lunar Surface ──
+    def surface(self, t, nar):
+        fig, ax = plt.subplots(figsize=(4,4), dpi=100)
+        fig.patch.set_facecolor('black')
+        ax.set_xlim(0,10); ax.set_ylim(0,10); ax.axis('off')
+        self._stars(ax, 100)
+
+        for x2 in range(10):
+            hill = 3.0+0.4*math.sin(x2*0.8)+0.2*math.sin(x2*2.1)
+            ax.fill_between([x2,x2+1], [hill,hill+0.1], [0,0], color='#4a4a5a', alpha=0.6)
+
+        for crx,cry,crr in [(1.5,2.5,0.5),(5.0,2.0,0.7),(8.0,2.3,0.4)]:
+            ax.add_patch(Circle((crx,cry), crr, color='#3a3a4a'))
+            ax.add_patch(Circle((crx,cry), crr+0.08, fill=False, edgecolor='#5a5a6a', linewidth=1))
+
+        ax.add_patch(Circle((8.5,8.0), 0.4, color='#4a7aaa', alpha=0.7))
+        ax.add_patch(Circle((8.5,8.0), 0.4, fill=False, edgecolor='#6a9aca', linewidth=1))
+
+        self._felix(ax, nar.felix_x, nar.felix_y, nar.felix_phase, "moon_walk", s=0.8)
+
+        fp = np.arange(0.5, nar.felix_x, 0.4)
+        for i, fpx in enumerate(fp):
+            a = max(0, 0.3-i*0.02)
+            ax.add_patch(Circle((fpx,2.7), 0.06, color='#5a5a6a', alpha=a))
+
+        ax.add_patch(Ellipse((8.5,2.8), 0.6, 0.35, angle=-10, color='#8B7355'))
+        ax.add_patch(Circle((8.55,2.82), 0.06, color='#4a9eff', alpha=0.6))
+
+        fx3 = 2.0
+        ax.plot([fx3,fx3], [3.0,4.5], '#aaa', linewidth=1.5)
+        ax.add_patch(Polygon([(fx3,4.5),(fx3+0.6,4.35),(fx3,4.2)], color='#cc3333'))
+
+        self._grain(ax, 60, 0.04)
+        return fig
+
+    # ── Scene: Felix waves from Moon ──
+    def wave(self, t, nar):
+        fig, ax = plt.subplots(figsize=(4,4), dpi=100)
+        fig.patch.set_facecolor('black')
+        ax.set_xlim(0,10); ax.set_ylim(0,10); ax.axis('off')
+        self._stars(ax, 100)
+
+        for x2 in range(10):
+            hill = 3.0+0.3*math.sin(x2*0.8)
+            ax.fill_between([x2,x2+1], [hill,hill+0.1], [0,0], color='#4a4a5a', alpha=0.6)
+
+        ax.add_patch(Circle((8.5,8.0), 0.5, color='#4a7aaa', alpha=0.7))
+        ax.add_patch(Circle((8.5,8.0), 0.5, fill=False, edgecolor='#6a9aca', linewidth=1))
+
+        self._felix(ax, 5.0, 3.5, nar.felix_phase, "waving", s=1.2)
+
+        fx4 = 2.0
+        ax.plot([fx4,fx4], [3.0,4.5], '#aaa', linewidth=1.5)
+        ax.add_patch(Polygon([(fx4,4.5),(fx4+0.6,4.35),(fx4,4.2)], color='#cc3333'))
+
+        self._grain(ax, 60, 0.04)
+        return fig
+
+
+def render(cfg):
+    nar = Narrative(cfg)
+    ren = Renderer(cfg)
+    frames = []
+    dt = 1.0 / cfg.fps
+    total = cfg.total_frames
+
+    print(f"Rendering {total} frames ({cfg.duration}s @ {cfg.fps}fps)...")
+
+    for i in range(total):
+        t = i * dt
+        nar.update(t, dt)
+        p = nar.phase(t)
+
+        if p == "city":        fig = ren.city(t, nar)
+        elif p == "attic":     fig = ren.attic(t, nar)
+        elif p == "congress":  fig = ren.congress(t, nar)
+        elif p == "launch":    fig = ren.launch(t, nar)
+        elif p == "space":     fig = ren.space(t, nar)
+        elif p == "impact":    fig = ren.impact(t, nar)
+        elif p == "surface":   fig = ren.surface(t, nar)
+        elif p == "wave":      fig = ren.wave(t, nar)
+        else:                  fig = ren.city(t, nar)
+
+        fig.canvas.draw()
+        buf = fig.canvas.buffer_rgba()
+        frames.append(np.asarray(buf)[:,:,:3].copy())
+        plt.close(fig)
+
+        if (i+1)%12==0 or i==total-1:
+            print(f"  [{i+1:3d}/{total}] {p:10s} t={t:.1f}s")
+
+    return frames
+
+
+def save_gif(frames, path, fps):
+    import imageio
+    imageio.mimsave(path, frames, duration=1.0/fps, loop=0)
+    print(f"\n  GIF: {path} ({len(frames)} frames, {len(frames)/fps:.1f}s)")
+
+
+def save_mp4(frames, path, fps):
+    mp4 = path.replace('.gif','.mp4')
+    h, w = frames[0].shape[:2]
+    cmd = ['ffmpeg','-y','-f','rawvideo','-vcodec','rawvideo',
+           '-pix_fmt','rgb24','-s',f'{w}x{h}','-r',str(fps),
+           '-i','-','-c:v','libx264','-pix_fmt','yuv420p','-crf','18',mp4]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    for f in frames:
+        proc.stdin.write(f.tobytes())
+    proc.stdin.close()
+    proc.wait()
+    if proc.returncode == 0:
+        print(f"  MP4: {mp4}")
+    else:
+        print(f"  MP4 error")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--output", default="trip_felix_moon.gif")
+    ap.add_argument("--duration", type=float, default=28.0)
+    ap.add_argument("--fps", type=int, default=12)
+    ap.add_argument("--mp4", action="store_true")
+    ap.add_argument("--seed", type=int, default=42)
+    args = ap.parse_args()
+
+    cfg = FilmConfig(fps=args.fps, duration=args.duration,
+                     output=args.output, seed=args.seed)
+
+    print("Trip to the Moon + Felix the Cat — No Text Edition")
+    print(f"{cfg.width}x{cfg.height} | {cfg.fps}fps | {cfg.duration}s | {cfg.total_frames} frames")
+
+    frames = render(cfg)
+    print("\nSaving...")
+    save_gif(frames, cfg.output, cfg.fps)
+    if args.mp4:
+        save_mp4(frames, cfg.output, cfg.fps)
+    print("Done.")
+
+
+if __name__ == "__main__":
+    main()
+
+#!/usr/bin/env python3
+"""
+EXECUTABLE CINEMA — Combined Program-Movie
+===========================================
+Combines:
+  • A Trip to the Moon (1902) — title cards, congress, launch, space, impact, surface
+  • Felix the Cat (1920s) — walking animation, state machine, dialogue
+  • Bird of Paradise (1932) — tropical waves, ritual dancer, fractal foliage
+
+Architecture:
+  frame(t) = render(scene[t], characters[t], dialogue[t], audio[t])
+  Every frame is a function call. No stored pixels. Deterministic.
+
+Output: GIF + MP4 via matplotlib + imageio (all open source).
+
+Usage:
+    python executable_cinema_combined.py                    # renders GIF
+    python executable_cinema_combined.py --output film.gif  # custom output
+    python executable_cinema_combined.py --duration 20      # seconds
+    python executable_cinema_combined.py --fps 12           # framerate
+    python executable_cinema_combined.py --preview          # show live
+"""
+
+import argparse
+import math
+import os
+import sys
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from matplotlib.patches import FancyBboxPatch, Circle, Ellipse
+from matplotlib.collections import LineCollection
+import matplotlib.collections as mcoll
+
+# ─── Configuration ──────────────────────────────────────────────────────────
+
+@dataclass
+class FilmConfig:
+    width: int = 400
+    height: int = 400
+    fps: int = 12
+    duration: float = 15.0
+    output: str = "executable_cinema.gif"
+    seed: int = 42
+
+    @property
+    def total_frames(self) -> int:
+        return int(self.duration * self.fps)
+
+
+# ─── Narrative State Machine (Micro-Level: Characters as State Machines) ────
+
+@dataclass
+class CharacterState:
+    name: str
+    state: str = "idle"
+    position: Tuple[float, float] = (0.0, 0.0)
+    velocity: Tuple[float, float] = (0.0, 0.0)
+    animation_phase: float = 0.0
+    dialogue: str = ""
+    dialogue_time: float = 0.0
+
+    def update(self, t: float, dt: float):
+        self.position = (
+            self.position[0] + self.velocity[0] * dt,
+            self.position[1] + self.velocity[1] * dt,
+        )
+        self.animation_phase = t
+
+class NarrativeEngine:
+    """
+    Micro-level narrative: plot = recursive loop of conflict → resolution → collapse.
+    Characters are state machines. Dialogue is a timestamped stream.
+    """
+
+    # Dialogue stream: {(time_start, time_end): "text"}
+    DIALOGUE_STREAM = {
+        (0.0, 2.5): "A TRIP TO THE MOON",
+        (2.5, 4.0): "Felix: I have a dream!",
+        (4.0, 6.0): "Tropical chanting echoes...",
+        (6.0, 8.0): "The capsule launches!",
+        (8.0, 10.0): "Felix walks through the stars",
+        (10.0, 12.0): "The dancer spins in ritual",
+        (12.0, 14.0): "IMPACT — The Moon screams!",
+        (14.0, 15.0): "FIN",
+    }
+
+    def __init__(self, config: FilmConfig):
+        self.config = config
+        self.felix = CharacterState(
+            name="Felix",
+            state="walking",
+            position=(1.0, 5.0),
+            velocity=(0.15, 0.0),
+        )
+        self.dancer = CharacterState(
+            name="Dancer",
+            state="ritual_motion",
+            position=(5.0, 5.0),
+        )
+        self.capsule = CharacterState(
+            name="Capsule",
+            state="grounded",
+            position=(2.0, 3.0),
+        )
+        self.state = "title"
+
+    def get_scene_phase(self, t: float) -> str:
+        """Determine which scene module is active at time t."""
+        dur = self.config.duration
+        if t < dur * 0.15:
+            return "title_card"
+        elif t < dur * 0.30:
+            return "felix_walk"
+        elif t < dur * 0.45:
+            return "bird_ritual"
+        elif t < dur * 0.55:
+            return "launch"
+        elif t < dur * 0.70:
+            return "space_travel"
+        elif t < dur * 0.85:
+            return "impact"
+        else:
+            return "fin"
+
+    def get_dialogue(self, t: float) -> str:
+        for (t0, t1), text in self.DIALOGUE_STREAM.items():
+            if t0 <= t < t1:
+                return text
+        return ""
+
+    def update(self, t: float, dt: float):
+        phase = self.get_scene_phase(t)
+        self.state = phase
+
+        if phase == "felix_walk":
+            self.felix.state = "walking"
+            self.felix.velocity = (0.15, 0.0)
+            self.felix.update(t, dt)
+            if self.felix.position[0] > 9.0:
+                self.felix.position = (1.0, 5.0)
+        elif phase == "bird_ritual":
+            self.dancer.state = "ritual_motion"
+        elif phase == "launch":
+            self.capsule.state = "launching"
+            launch_t = (t - self.config.duration * 0.45) / (self.config.duration * 0.10)
+            self.capsule.position = (2.0 + launch_t * 6.0, 3.0 + launch_t * 4.0)
+        elif phase == "impact":
+            self.capsule.state = "crashed"
+            self.capsule.position = (7.0, 6.5)
+
+
+# ─── Scene Modules (Micro-Level: Environment as Procedural Geometry) ───────
+
+class SceneRenderer:
+    """Each scene is a module that generates environment geometry procedurally."""
+
+    def __init__(self, config: FilmConfig):
+        self.config = config
+        self.rng = np.random.default_rng(config.seed)
+
+    def _add_film_grain(self, ax, intensity=0.03):
+        """Procedural film grain overlay."""
+        for _ in range(80):
+            x = self.rng.uniform(0, 10)
+            y = self.rng.uniform(0, 10)
+            b = self.rng.uniform(0, intensity)
+            ax.plot(x, y, '.', color=str(b), markersize=1, alpha=0.5)
+
+    def _add_vignette(self, fig):
+        """Dark vignette corners."""
+        ax = fig.add_axes([0, 0, 1, 1], polar=False, facecolor='none')
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.axis('off')
+        for corner_x, corner_y in [(0, 0), (0, 10), (10, 0), (10, 10)]:
+            circle = plt.Circle((corner_x, corner_y), 6, color='black', alpha=0.4)
+            ax.add_patch(circle)
+        return ax
+
+    def render_title_card(self, t: float, text: str) -> plt.Figure:
+        """Silent film intertitle — white text on black with ornate border."""
+        fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
+        fig.patch.set_facecolor('black')
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.axis('off')
+
+        # Ornate border
+        for offset in [0.3, 0.5]:
+            rect = plt.Rectangle((offset, offset), 10 - 2*offset, 10 - 2*offset,
+                                fill=False, edgecolor='white', linewidth=1.5, alpha=0.6)
+            ax.add_patch(rect)
+
+        # Corner decorations
+        for cx, cy in [(0.8, 0.8), (0.8, 9.2), (9.2, 0.8), (9.2, 9.2)]:
+            ax.plot(cx, cy, 'o', color='white', markersize=4, alpha=0.7)
+
+        # Text with fade
+        progress = (t % 2.5) / 2.5
+        alpha = min(progress * 3, 1.0, (1.0 - progress) * 3)
+        ax.text(5, 5.5, text, fontsize=14, color='white', alpha=alpha,
+               ha='center', va='center', fontweight='bold',
+               fontfamily='serif')
+        ax.text(5, 4.5, "— 1902 —", fontsize=9, color='white', alpha=alpha * 0.6,
+               ha='center', va='center', fontfamily='serif')
+
+        self._add_film_grain(ax, 0.05)
+        return fig
+
+    def render_felix_scene(self, t: float, character: CharacterState) -> plt.Figure:
+        """Felix the Cat walking across a simple landscape."""
+        fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
+        fig.patch.set_facecolor('white')
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.axis('off')
+
+        # Sky gradient (horizontal lines)
+        for y in np.linspace(7, 10, 15):
+            alpha = (y - 7) / 3.0 * 0.3
+            ax.axhspan(y, y + 0.2, color='#87CEEB', alpha=alpha)
+
+        # Ground
+        ax.fill_between([0, 10], [0, 0], [2.5, 2.5], color='#8B7355', alpha=0.6)
+        ax.plot([0, 10], [2.5, 2.5], color='#654321', linewidth=2)
+
+        # Grass tufts
+        for gx in np.linspace(0, 10, 20):
+            h = 0.3 + 0.2 * math.sin(gx * 3)
+            ax.plot([gx, gx - 0.1], [2.5, 2.5 + h], color='green', linewidth=1)
+            ax.plot([gx, gx + 0.1], [2.5, 2.5 + h * 0.8], color='green', linewidth=1)
+
+        # Felix character
+        fx, fy = character.position
+        phase = character.animation_phase
+
+        # Body (black ellipse)
+        body = Ellipse((fx, fy), 1.2, 1.8, color='black')
+        ax.add_patch(body)
+
+        # Head
+        head = Circle((fx, fy + 1.3), 0.6, color='black')
+        ax.add_patch(head)
+
+        # Ears (triangles)
+        ear_l = plt.Polygon([(fx - 0.4, fy + 1.7), (fx - 0.2, fy + 2.3), (fx, fy + 1.7)],
+                           color='black')
+        ear_r = plt.Polygon([(fx + 0.4, fy + 1.7), (fx + 0.2, fy + 2.3), (fx, fy + 1.7)],
+                           color='black')
+        ax.add_patch(ear_l)
+        ax.add_patch(ear_r)
+
+        # Eyes (white with black pupils)
+        ax.add_patch(Circle((fx - 0.2, fy + 1.4), 0.15, color='white'))
+        ax.add_patch(Circle((fx + 0.2, fy + 1.4), 0.15, color='white'))
+        pupil_offset = 0.03 * math.sin(phase * 3)
+        ax.add_patch(Circle((fx - 0.2 + pupil_offset, fy + 1.4), 0.06, color='black'))
+        ax.add_patch(Circle((fx + 0.2 + pupil_offset, fy + 1.4), 0.06, color='black'))
+
+        # Mouth (smile)
+        mouth_x = np.linspace(fx - 0.15, fx + 0.15, 20)
+        mouth_y = fy + 1.1 + 0.05 * np.sin(np.linspace(0, np.pi, 20))
+        ax.plot(mouth_x, mouth_y, 'white', linewidth=1.5)
+
+        # Legs (animated walk cycle)
+        leg_phase = phase * 4
+        for leg_sign, leg_name in [(-1, 'left'), (1, 'right')]:
+            leg_swing = 0.3 * math.sin(leg_phase + (0 if leg_name == 'left' else math.pi))
+            knee_x = fx + leg_sign * 0.3 + leg_swing * 0.5
+            knee_y = fy - 0.9
+            foot_x = knee_x + leg_swing * 0.3
+            foot_y = fy - 1.5
+            ax.plot([fx + leg_sign * 0.2, knee_x], [fy - 0.6, knee_y], 'black', linewidth=3)
+            ax.plot([knee_x, foot_x], [knee_y, foot_y], 'black', linewidth=3)
+
+        # Arms (animated swing)
+        arm_phase = phase * 4
+        for arm_sign in [-1, 1]:
+            arm_swing = 0.25 * math.sin(arm_phase + (0 if arm_sign == -1 else math.pi))
+            hand_x = fx + arm_sign * 0.7 + arm_swing
+            hand_y = fy + 0.3 + arm_swing * 0.5
+            ax.plot([fx + arm_sign * 0.5, hand_x], [fy + 0.2, hand_y], 'black', linewidth=3)
+            # Hand (small circle)
+            ax.add_patch(Circle((hand_x, hand_y), 0.1, color='black'))
+
+        # Dialogue bubble
+        dialogue = character.dialogue
+        if dialogue:
+            ax.annotate(dialogue, xy=(fx, fy + 2.5), fontsize=7,
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.9),
+                       ha='center', va='bottom')
+
+        self._add_film_grain(ax, 0.02)
+        return fig
+
+    def render_bird_scene(self, t: float, character: CharacterState) -> plt.Figure:
+        """Bird of Paradise — tropical landscape with ritual dancer."""
+        fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
+        fig.patch.set_facecolor('#1a3a1a')
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.axis('off')
+
+        # Sky (dark tropical)
+        for y in np.linspace(6, 10, 10):
+            alpha = (y - 6) / 4.0 * 0.4
+            ax.axhspan(y, y + 0.4, color='#0a2a0a', alpha=alpha)
+
+        # Ocean waves
+        x_wave = np.linspace(0, 10, 300)
+        for layer in range(3):
+            y_wave = 1.5 + layer * 0.3 + 0.2 * np.sin(x_wave * 2 + t * 0.5 + layer)
+            alpha = 0.4 - layer * 0.1
+            ax.plot(x_wave, y_wave, color='#1a5a8a', linewidth=1.5, alpha=alpha)
+
+        # Beach
+        ax.fill_between([0, 10], [0, 0], [1.5, 1.5], color='#c2b280', alpha=0.7)
+
+        # Palm trees (procedural fractal-like)
+        for tx in [1.5, 4.0, 7.5, 9.0]:
+            trunk_h = 4.0 + 0.5 * math.sin(tx)
+            # Trunk (curved)
+            trunk_x = np.linspace(tx, tx + 0.3, 20)
+            trunk_y = np.linspace(1.5, 1.5 + trunk_h, 20)
+            ax.plot(trunk_x, trunk_y, '#4a3728', linewidth=4)
+
+            # Fronds (recursive-like)
+            top_x, top_y = trunk_x[-1], trunk_y[-1]
+            for angle in np.linspace(-1.2, 1.2, 7):
+                frond_len = 2.0 + 0.3 * math.sin(angle * 3)
+                frond_x = top_x + frond_len * math.sin(angle)
+                frond_y = top_y + frond_len * math.cos(angle) * 0.5
+                # Frond shape (line + leaf segments)
+                n_seg = 10
+                for i in range(n_seg):
+                    f = i / n_seg
+                    seg_x = top_x + (frond_x - top_x) * f
+                    seg_y = top_y + (frond_y - top_y) * f
+                    leaf_len = 0.3 * (1 - f)
+                    ax.plot([seg_x, seg_x + leaf_len * math.cos(angle)],
+                           [seg_y, seg_y + leaf_len * math.sin(angle)],
+                           color='#2d5a1e', linewidth=1, alpha=0.8)
+
+        # Ritual dancer (geometric figure)
+        dx, dy = character.position
+        phase = character.animation_phase
+
+        # Dancer orbit
+        orbit_x = 5.0 + 1.5 * math.sin(phase * 0.8)
+        orbit_y = 4.5 + 0.5 * math.cos(phase * 0.8)
+
+        # Body (torso)
+        ax.plot([orbit_x, orbit_x], [orbit_y - 0.8, orbit_y + 0.5], 'red', linewidth=3)
+
+        # Head
+        ax.add_patch(Circle((orbit_x, orbit_y + 0.7), 0.25, color='red'))
+
+        # Arms (raised in ritual)
+        arm_angle = phase * 2
+        for side in [-1, 1]:
+            arm_x = orbit_x + side * 0.8 * math.cos(arm_angle + side * 0.5)
+            arm_y = orbit_y + 0.8 * abs(math.sin(arm_angle + side * 0.5))
+            ax.plot([orbit_x, arm_x], [orbit_y + 0.3, arm_y], 'red', linewidth=2.5)
+            # Hand flame
+            flame_size = 0.15 + 0.05 * math.sin(phase * 6)
+            ax.add_patch(Circle((arm_x, arm_y), flame_size, color='orange', alpha=0.8))
+            ax.add_patch(Circle((arm_x, arm_y + 0.1), flame_size * 0.6, color='yellow', alpha=0.7))
+
+        # Legs (dance steps)
+        leg_swing = 0.4 * math.sin(phase * 3)
+        ax.plot([orbit_x, orbit_x - 0.3 + leg_swing], [orbit_y - 0.8, orbit_y - 1.8], 'red', linewidth=2.5)
+        ax.plot([orbit_x, orbit_x + 0.3 - leg_swing], [orbit_y - 0.8, orbit_y - 1.8], 'red', linewidth=2.5)
+
+        # Ritual circle on ground
+        circle_r = 2.0
+        circle_theta = np.linspace(0, 2 * np.pi, 100)
+        cx = 5.0 + circle_r * np.cos(circle_theta)
+        cy = 3.0 + circle_r * 0.3 * np.sin(circle_theta)
+        ax.plot(cx, cy, 'gold', linewidth=1.5, alpha=0.5, linestyle='--')
+
+        # Ritual symbols (small triangles)
+        for i in range(8):
+            angle = i * np.pi / 4 + phase * 0.2
+            sx = 5.0 + 2.2 * math.cos(angle)
+            sy = 3.0 + 0.6 * math.sin(angle)
+            tri = plt.Polygon([(sx, sy + 0.15), (sx - 0.1, sy - 0.1), (sx + 0.1, sy - 0.1)],
+                             color='gold', alpha=0.6)
+            ax.add_patch(tri)
+
+        self._add_film_grain(ax, 0.03)
+        return fig
+
+    def render_launch_scene(self, t: float, character: CharacterState) -> plt.Figure:
+        """The cannon launch scene from Trip to the Moon."""
+        fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
+        fig.patch.set_facecolor('#1a1a2e')
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.axis('off')
+
+        # Night sky
+        for _ in range(60):
+            sx = self.rng.uniform(0, 10)
+            sy = self.rng.uniform(5, 10)
+            sb = self.rng.uniform(0.3, 1.0)
+            ax.plot(sx, sy, '.', color='white', markersize=sb * 2, alpha=sb)
+
+        # Ground
+        ax.fill_between([0, 10], [0, 0], [3, 3], color='#2a2a2a')
+
+        # Cannon
+        cannon_base_x, cannon_base_y = 2.5, 3.0
+        cannon_angle = 0.8  # radians
+        cannon_len = 3.0
+        cannon_tip_x = cannon_base_x + cannon_len * math.cos(cannon_angle)
+        cannon_tip_y = cannon_base_y + cannon_len * math.sin(cannon_angle)
+
+        # Barrel
+        ax.plot([cannon_base_x, cannon_tip_x], [cannon_base_y, cannon_tip_y],
+               '#333333', linewidth=8, solid_capstyle='round')
+
+        # Wheels
+        for wx in [cannon_base_x - 0.3, cannon_base_x + 0.5]:
+            ax.add_patch(Circle((wx, 2.7), 0.4, color='#222222', fill=True))
+            ax.add_patch(Circle((wx, 2.7), 0.15, color='#444444', fill=True))
+
+        # Capsule
+        cx, cy = character.position
+        capsule = Ellipse((cx, cy), 0.8, 0.5, angle=45, color='#8B7355')
+        ax.add_patch(capsule)
+        # Window
+        ax.add_patch(Circle((cx + 0.1, cy + 0.05), 0.1, color='#4a9eff', alpha=0.8))
+
+        # Launch flame
+        if character.state == "launching":
+            flame_t = (t - self.config.duration * 0.45) / (self.config.duration * 0.10)
+            flame_len = flame_t * 2.0
+            for i in range(int(flame_len * 10)):
+                fx = cannon_tip_x + i * 0.05
+                fy = cannon_tip_y + 0.1 * math.sin(i * 0.5 + t * 10)
+                fb = max(0, 1.0 - i / (flame_len * 10))
+                color = 'yellow' if fb > 0.5 else 'orange' if fb > 0.2 else 'red'
+                ax.plot(fx, fy, '.', color=color, markersize=3, alpha=fb)
+
+        # Smoke
+        if character.state == "launching":
+            for i in range(5):
+                smoke_x = cannon_base_x - 0.5 + i * 0.3
+                smoke_y = cannon_base_y + flame_t * 0.5 + i * 0.2
+                smoke_r = 0.2 + flame_t * 0.3
+                ax.add_patch(Circle((smoke_x, smoke_y), smoke_r,
+                                   color='gray', alpha=max(0, 0.4 - flame_t * 0.3)))
+
+        self._add_film_grain(ax, 0.04)
+        return fig
+
+    def render_space_scene(self, t: float, character: CharacterState) -> plt.Figure:
+        """Space travel — streaming stars, comet, capsule in flight."""
+        fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
+        fig.patch.set_facecolor('black')
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.axis('off')
+
+        # Streaming stars (motion-blurred)
+        rng = np.random.default_rng(42)
+        for i in range(100):
+            sx = rng.uniform(0, 10)
+            sy = rng.uniform(0, 10)
+            speed = rng.uniform(0.5, 3.0)
+            length = speed * 0.8
+            brightness = rng.uniform(0.3, 1.0)
+            # Trail
+            ax.plot([sx, sx + length], [sy, sy], color='white',
+                   linewidth=0.5, alpha=brightness * 0.6)
+            # Head
+            ax.plot(sx, sy, '.', color='white', markersize=brightness * 2)
+
+        # Comet
+        if 0.3 < (t % 3) / 3 < 0.8:
+            comet_progress = (t % 3) / 3
+            comet_x = 10 - comet_progress * 12
+            comet_y = 6 + math.sin(comet_progress * 4) * 1.5
+            ax.add_patch(Circle((comet_x, comet_y), 0.2, color='white'))
+            # Tail
+            for dx in range(1, 15):
+                tail_alpha = max(0, 1.0 - dx / 15)
+                ax.plot(comet_x + dx * 0.15, comet_y + dx * 0.05, '.',
+                       color='white', markersize=1, alpha=tail_alpha * 0.5)
+
+        # Capsule in flight
+        cx, cy = 5.0, 5.0
+        capsule = Ellipse((cx, cy), 0.6, 0.35, angle=10, color='#8B7355')
+        ax.add_patch(capsule)
+        ax.add_patch(Circle((cx + 0.1, cy), 0.08, color='#4a9eff', alpha=0.8))
+
+        # Exhaust trail
+        for i in range(20):
+            ex = cx - 0.4 - i * 0.1
+            ey = cy + 0.05 * math.sin(t * 5 + i * 0.3)
+            eb = max(0, 1.0 - i / 20)
+            color = 'yellow' if eb > 0.6 else 'orange' if eb > 0.3 else 'red'
+            ax.plot(ex, ey, '.', color=color, markersize=2, alpha=eb * 0.7)
+
+        self._add_film_grain(ax, 0.03)
+        return fig
+
+    def render_impact_scene(self, t: float, character: CharacterState) -> plt.Figure:
+        """The Moon gets hit in the eye."""
+        fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
+        fig.patch.set_facecolor('black')
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.axis('off')
+
+        # Moon face (large)
+        moon_cx, moon_cy = 5.5, 5.0
+        moon_r = 2.5
+        moon = Circle((moon_cx, moon_cy), moon_r, color='#e8e8d0')
+        ax.add_patch(moon)
+
+        # Shading (terminator)
+        for angle in np.linspace(0, 2 * np.pi, 60):
+            for r_frac in np.linspace(0, 1, 5):
+                px = moon_cx + moon_r * r_frac * math.cos(angle)
+                py = moon_cy + moon_r * r_frac * math.sin(angle)
+                shade = 0.5 + 0.5 * math.cos(angle)
+                ax.plot(px, py, '.', color=str(0.3 * shade), markersize=1, alpha=0.3)
+
+        # Left eye
+        eye_lx = moon_cx - moon_r * 0.35
+        eye_y = moon_cy + moon_r * 0.1
+        ax.add_patch(Ellipse((eye_lx, eye_y), 0.8, 0.5, color='#2a2a2a'))
+        ax.add_patch(Circle((eye_lx, eye_y), 0.18, color='white'))
+
+        # Right eye
+        eye_rx = moon_cx + moon_r * 0.35
+        ax.add_patch(Ellipse((eye_rx, eye_y), 0.8, 0.5, color='#2a2a2a'))
+        ax.add_patch(Circle((eye_rx, eye_y), 0.18, color='white'))
+
+        # Impact damage on left eye
+        impact_time = t - self.config.duration * 0.70
+        if impact_time > 0:
+            dmg_r = 0.2 + impact_time * 0.5
+            ax.add_patch(Circle((eye_lx, eye_y), dmg_r, color='black'))
+            # Shock lines
+            for angle in np.linspace(0, 2 * np.pi, 8):
+                line_len = dmg_r * 1.5
+                lx = eye_lx + line_len * math.cos(angle)
+                ly = eye_y + line_len * math.sin(angle)
+                ax.plot([eye_lx, lx], [eye_y, ly], 'black', linewidth=1.5)
+
+        # Nose
+        nose_y = moon_cy - moon_r * 0.1
+        ax.plot([moon_cx, moon_cx + 0.1], [nose_y, nose_y - 0.5], '#8a8a70', linewidth=2)
+
+        # Mouth (worried after impact)
+        mouth_y = moon_cy - moon_r * 0.4
+        mouth_x = np.linspace(moon_cx - 0.5, moon_cx + 0.5, 30)
+        if impact_time > 0:
+            mouth_curve = mouth_y + 0.1 * np.sin(np.linspace(0, np.pi, 30))  # frown
+        else:
+            mouth_curve = mouth_y - 0.1 * np.sin(np.linspace(0, np.pi, 30))  # smile
+        ax.plot(mouth_x, mouth_curve, '#5a5a4a', linewidth=2)
+
+        # Capsule approaching (before impact)
+        if impact_time < 0:
+            cap_progress = 1.0 + impact_time / (self.config.duration * 0.15)
+            cap_x = -1 + cap_progress * (eye_lx + 1)
+            cap_y = 8 - cap_progress * (8 - eye_y)
+            capsule = Ellipse((cap_x, cap_y), 0.4, 0.25, angle=30, color='#8B7355')
+            ax.add_patch(capsule)
+            # Trail
+            for i in range(8):
+                tx = cap_x - i * 0.15
+                ty = cap_y + i * 0.1
+                ax.plot(tx, ty, '.', color='white', markersize=1, alpha=0.5 * (1 - i / 8))
+
+        # Impact flash
+        if 0 < impact_time < 0.5:
+            flash_r = impact_time * 4
+            flash = Circle((eye_lx, eye_y), flash_r, color='yellow', alpha=max(0, 1 - impact_time * 2))
+            ax.add_patch(flash)
+
+        # Camera shake
+        if impact_time > 0 and impact_time < 1.0:
+            shake = int(impact_time * 5) % 2
+            if shake:
+                ax.set_xlim(0.1, 10.1)
+                ax.set_ylim(-0.1, 9.9)
+
+        self._add_film_grain(ax, 0.05)
+        return fig
+
+
+# ─── Audio Synthesis (Micro-Level: Procedural Sound) ────────────────────────
+
+class AudioSynth:
+    """
+    Procedural audio — generates tones/drums tied to frame index.
+    For GIF output we skip actual audio, but the data structure is here
+    for when you want WAV/MP4 output.
+    """
+
+    def __init__(self, config: FilmConfig):
+        self.config = config
+        self.rate = 22050
+
+    def generate_tone(self, freq: float, duration: float, volume: float = 0.3) -> np.ndarray:
+        t = np.linspace(0, duration, int(self.rate * duration), False)
+        signal = volume * np.sin(2 * np.pi * freq * t)
+        envelope = np.exp(-t * 3.0)
+        return signal * envelope
+
+    def generate_drum(self, duration: float = 0.1, volume: float = 0.5) -> np.ndarray:
+        n = int(self.rate * duration)
+        t = np.linspace(0, duration, n, False)
+        signal = volume * np.sin(2 * np.pi * 80 * t) * np.exp(-t * 30)
+        noise = np.random.randn(n) * 0.1 * np.exp(-t * 20)
+        return signal + noise
+
+    def score_for_scene(self, scene: str, t: float) -> Optional[np.ndarray]:
+        if scene == "title_card":
+            return self.generate_tone(261.63, 0.5, 0.2)  # C4
+        elif scene == "felix_walk":
+            return self.generate_tone(329.63, 0.3, 0.15)  # E4
+        elif scene == "bird_ritual":
+            return self.generate_drum(0.15, 0.3)
+        elif scene == "launch":
+            return self.generate_tone(196 + t * 50, 0.2, 0.25)  # Rising
+        elif scene == "impact":
+            return self.generate_drum(0.3, 0.6)
+        return None
+
+
+# ─── Main Render Pipeline ───────────────────────────────────────────────────
+
+def render_film(config: FilmConfig) -> List[np.ndarray]:
+    """Render all frames to memory as numpy arrays."""
+    narrative = NarrativeEngine(config)
+    renderer = SceneRenderer(config)
+    audio = AudioSynth(config)
+
+    frames = []
+    total = config.total_frames
+    dt = 1.0 / config.fps
+
+    print(f"Rendering {total} frames ({config.duration}s @ {config.fps}fps)...")
+
+    for i in range(total):
+        t = i * dt
+        narrative.update(t, dt)
+        scene = narrative.get_scene_phase(t)
+        dialogue = narrative.get_dialogue(t)
+
+        # Assign dialogue to character
+        if scene == "felix_walk":
+            narrative.felix.dialogue = dialogue
+        elif scene in ("bird_ritual", "impact"):
+            narrative.dancer.dialogue = dialogue
+
+        # Render scene module
+        if scene == "title_card":
+            fig = renderer.render_title_card(t, dialogue or "A TRIP TO THE MOON")
+        elif scene == "felix_walk":
+            fig = renderer.render_felix_scene(t, narrative.felix)
+        elif scene == "bird_ritual":
+            fig = renderer.render_bird_scene(t, narrative.dancer)
+        elif scene == "launch":
+            fig = renderer.render_launch_scene(t, narrative.capsule)
+        elif scene == "space_travel":
+            fig = renderer.render_space_scene(t, narrative.capsule)
+        elif scene == "impact":
+            fig = renderer.render_impact_scene(t, narrative.capsule)
+        elif scene == "fin":
+            fig = renderer.render_title_card(t, "FIN")
+        else:
+            fig = renderer.render_title_card(t, "...")
+
+        # Convert figure to numpy array
+        fig.canvas.draw()
+        buf = fig.canvas.buffer_rgba()
+        image = np.asarray(buf)[:, :, :3]  # drop alpha
+        plt.close(fig)
+
+        frames.append(image)
+
+        if (i + 1) % 10 == 0 or i == total - 1:
+            print(f"  [{i+1}/{total}] scene={scene:15s} t={t:.1f}s")
+
+    return frames
+
+
+def save_gif(frames: List[np.ndarray], output: str, fps: int):
+    """Save frames as GIF using imageio."""
+    import imageio
+    duration = 1.0 / fps
+    imageio.mimsave(output, frames, duration=duration, loop=0)
+    print(f"\n  ✓ GIF saved: {output} ({len(frames)} frames, {len(frames)/fps:.1f}s)")
+
+
+def save_mp4(frames: List[np.ndarray], output: str, fps: int):
+    """Save frames as MP4 using ffmpeg pipe."""
+    import subprocess
+    import tempfile
+    mp4_output = output.replace('.gif', '.mp4')
+    # Write frames as raw RGB, pipe to ffmpeg
+    cmd = [
+        'ffmpeg', '-y',
+        '-f', 'rawvideo',
+        '-vcodec', 'rawvideo',
+        '-pix_fmt', 'rgb24',
+        '-s', f'{frames[0].shape[1]}x{frames[0].shape[0]}',
+        '-r', str(fps),
+        '-i', '-',
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        '-crf', '18',
+        mp4_output
+    ]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    for frame in frames:
+        proc.stdin.write(frame.tobytes())
+    proc.stdin.close()
+    proc.wait()
+    if proc.returncode == 0:
+        print(f"  ✓ MP4 saved: {mp4_output}")
+    else:
+        print(f"  ✗ MP4 failed: {proc.stderr.read().decode()[-200:]}")
+
+
+def show_preview(frames: List[np.ndarray], fps: int):
+    """Display animation in live window."""
+    try:
+        import matplotlib.animation as animation
+        fig, ax = plt.subplots(figsize=(4, 4))
+        ax.axis('off')
+        img = ax.imshow(frames[0])
+
+        def update(frame_idx):
+            img.set_data(frames[frame_idx])
+            return [img]
+
+        ani = animation.FuncAnimation(fig, update, frames=len(frames),
+                                      interval=1000/fps, blit=True)
+        plt.title("Executable Cinema — Combined Program-Movie")
+        plt.show()
+        return ani
+    except Exception as e:
+        print(f"  Preview failed: {e}")
+        return None
+
+
+# ─── Entry Point ────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Executable Cinema — Combined Program-Movie"
+    )
+    parser.add_argument("--output", type=str, default="executable_cinema.gif")
+    parser.add_argument("--duration", type=float, default=15.0)
+    parser.add_argument("--fps", type=int, default=12)
+    parser.add_argument("--width", type=int, default=400)
+    parser.add_argument("--height", type=int, default=400)
+    parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--mp4", action="store_true", help="Also save MP4")
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
+
+    config = FilmConfig(
+        width=args.width,
+        height=args.height,
+        fps=args.fps,
+        duration=args.duration,
+        output=args.output,
+        seed=args.seed,
+    )
+
+    print("╔══════════════════════════════════════════════════╗")
+    print("║  EXECUTABLE CINEMA — Combined Program-Movie     ║")
+    print("║  Trip to the Moon + Felix the Cat + Bird of Paradise ║")
+    print("╠══════════════════════════════════════════════════╣")
+    print(f"║  Resolution: {config.width}x{config.height}                     ║")
+    print(f"║  Framerate:  {config.fps} fps                            ║")
+    print(f"║  Duration:   {config.duration}s                             ║")
+    print(f"║  Frames:     {config.total_frames}                              ║")
+    print("╚══════════════════════════════════════════════════╝")
+
+    # Render all frames
+    frames = render_film(config)
+
+    # Save outputs
+    print("\nSaving outputs...")
+    save_gif(frames, config.output, config.fps)
+
+    if args.mp4:
+        save_mp4(frames, config.output, config.fps)
+
+    if args.preview:
+        print("\nOpening preview...")
+        show_preview(frames, config.fps)
+
+    # Summary
+    print("\n📋 Narrative Timeline:")
+    narrative = NarrativeEngine(config)
+    dt = 1.0 / config.fps
+    last_scene = ""
+    for i in range(config.total_frames):
+        t = i * dt
+        scene = narrative.get_scene_phase(t)
+        if scene != last_scene:
+            dialogue = narrative.get_dialogue(t)
+            print(f"  [{t:5.1f}s] {scene:15s} │ {dialogue}")
+            last_scene = scene
+
+    print(f"\n{'='*50}")
+    print(f"  PROGRAM-MOVIE COMPLETE")
+    print(f"  Every frame = f(t). No stored pixels.")
+    print(f"  Running this script regenerates the identical film.")
+    print(f"{'='*50}")
+
+
+if __name__ == "__main__":
+    main()
+
 
 import os
 import numpy as np
