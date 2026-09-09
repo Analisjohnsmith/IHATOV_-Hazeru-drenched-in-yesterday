@@ -6225,3 +6225,386 @@ if __name__ == "__main__":
     lee.run(5)
     lee.shutdown()
 
+# package_manager.py
+import json
+import os
+import hashlib
+import shutil
+from dataclasses import dataclass, asdict
+from typing import Dict, List, Optional, Any
+from datetime import datetime
+from pathlib import Path
+import subprocess
+import sys
+
+@dataclass
+class GenerativePackage:
+    """Represents a generative math package for the game studio"""
+    name: str
+    version: str
+    author: str
+    description: str
+    generative_math_functions: List[str]
+    dependencies: Dict[str, str]
+    computational_substrate: Dict[str, Any]
+    created_at: str
+    hash: str = ""
+    
+    def compute_hash(self) -> str:
+        """Compute package hash for integrity checking"""
+        content = f"{self.name}{self.version}{self.author}{self.description}"
+        return hashlib.sha256(content.encode()).hexdigest()
+
+class GenerativePackageManager:
+    """Package manager for generative mathematical substrates"""
+    
+    def __init__(self, studio_path: str = "./generative_studio"):
+        self.studio_path = Path(studio_path)
+        self.packages_dir = self.studio_path / "packages"
+        self.config_dir = self.studio_path / "config"
+        self.generative_cache = self.studio_path / "cache"
+        self.registry_file = self.config_dir / "package_registry.json"
+        
+        self._initialize_directories()
+        self.registry = self._load_registry()
+    
+    def _initialize_directories(self):
+        """Create necessary directories"""
+        for dir_path in [self.studio_path, self.packages_dir, 
+                        self.config_dir, self.generative_cache]:
+            dir_path.mkdir(parents=True, exist_ok=True)
+    
+    def _load_registry(self) -> Dict:
+        """Load package registry"""
+        if self.registry_file.exists():
+            with open(self.registry_file, 'r') as f:
+                return json.load(f)
+        return {"packages": {}, "generative_substrates": []}
+    
+    def _save_registry(self):
+        """Save package registry"""
+        with open(self.registry_file, 'w') as f:
+            json.dump(self.registry, f, indent=2)
+    
+    def create_package(self, name: str, version: str, author: str, 
+                      description: str, generative_functions: List[str],
+                      computational_substrate: Dict[str, Any]):
+        """Create a new generative math package"""
+        
+        package = GenerativePackage(
+            name=name,
+            version=version,
+            author=author,
+            description=description,
+            generative_math_functions=generative_functions,
+            dependencies={},
+            computational_substrate=computational_substrate,
+            created_at=datetime.now().isoformat(),
+            hash=""
+        )
+        package.hash = package.compute_hash()
+        
+        # Save package metadata
+        package_dir = self.packages_dir / f"{name}-{version}"
+        package_dir.mkdir(exist_ok=True)
+        
+        with open(package_dir / "package.json", 'w') as f:
+            json.dump(asdict(package), f, indent=2)
+        
+        # Generate generative math module
+        self._generate_generative_module(package, package_dir)
+        
+        # Register package
+        self.registry["packages"][f"{name}@{version}"] = asdict(package)
+        self._save_registry()
+        
+        print(f"✅ Created package: {name} v{version}")
+        return package
+    
+    def _generate_generative_module(self, package: GenerativePackage, package_dir: Path):
+        """Generate the generative mathematics module"""
+        
+        module_path = package_dir / "generative_substrate.py"
+        
+        with open(module_path, 'w') as f:
+            f.write(f'''"""
+Generative Math Substrate for {package.name}
+Created by: {package.author}
+Description: {package.description}
+"""
+
+import numpy as np
+from typing import List, Tuple, Callable
+import random
+import math
+
+class GenerativeSubstrate:
+    """Computational substrate for generative mathematics"""
+    
+    def __init__(self, seed: int = None):
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
+        
+        self.noise_field = self._initialize_noise_field()
+        self.mutation_rate = 0.1
+        self.substrate_config = {json.dumps(package.computational_substrate)}
+    
+    def _initialize_noise_field(self, size: Tuple[int, int] = (100, 100)) -> np.ndarray:
+        """Initialize generative noise field"""
+        return np.random.randn(*size)
+    
+    def _evolve_field(self, iterations: int = 1):
+        """Evolve the substrate field"""
+        for _ in range(iterations):
+            self.noise_field += np.random.randn(*self.noise_field.shape) * self.mutation_rate
+            self.noise_field = np.clip(self.noise_field, -3, 3)
+    
+    {self._generate_generative_methods(package.generative_math_functions)}
+    
+    def generate_artifacts(self, params: dict = None) -> dict:
+        """Generate game artifacts from the substrate"""
+        self._evolve_field()
+        
+        artifacts = {{
+            "timestamp": datetime.now().isoformat(),
+            "substrate_state": self.noise_field.tolist(),
+            "mutations": []
+        }}
+        
+        for func_name in {package.generative_math_functions}:
+            if hasattr(self, func_name):
+                try:
+                    result = getattr(self, func_name)(params)
+                    artifacts["mutations"].append({{
+                        "function": func_name,
+                        "result": result
+                    }})
+                except Exception as e:
+                    artifacts["mutations"].append({{
+                        "function": func_name,
+                        "error": str(e)
+                    }})
+        
+        return artifacts
+
+''')
+    
+    def _generate_generative_methods(self, functions: List[str]) -> str:
+        """Generate placeholder methods for generative functions"""
+        methods = []
+        for func_name in functions:
+            methods.append(f'''
+    def {func_name}(self, params: dict = None) -> dict:
+        """Generative mathematical transformation"""
+        # Substrate-based generative computation
+        result = {{
+            "input": params,
+            "substrate_influence": float(np.mean(self.noise_field)),
+            "generative_output": np.random.rand() * self.noise_field.shape[0]
+        }}
+        return result
+''')
+        return "\n".join(methods)
+    
+    def install_package(self, package_name: str, version: str = "latest"):
+        """Install a package from registry"""
+        
+        if version == "latest":
+            # Find latest version
+            versions = [pkg for pkg in self.registry["packages"].keys() 
+                       if pkg.startswith(f"{package_name}@")]
+            if not versions:
+                raise ValueError(f"Package {package_name} not found")
+            version = versions[-1].split("@")[1]
+        
+        package_key = f"{package_name}@{version}"
+        
+        if package_key not in self.registry["packages"]:
+            raise ValueError(f"Package {package_name} version {version} not found")
+        
+        package_data = self.registry["packages"][package_key]
+        
+        # Install to studio
+        install_dir = self.studio_path / "installed" / package_name
+        install_dir.mkdir(parents=True, exist_ok=True)
+        
+        source_dir = self.packages_dir / f"{package_name}-{version}"
+        
+        if source_dir.exists():
+            # Copy package files
+            for file in source_dir.glob("*"):
+                if file.is_file():
+                    shutil.copy2(file, install_dir / file.name)
+            
+            print(f"📦 Installed {package_name} v{version}")
+            
+            # Register as installed
+            installed_file = self.studio_path / "installed" / "manifest.json"
+            installed_packages = {}
+            if installed_file.exists():
+                with open(installed_file, 'r') as f:
+                    installed_packages = json.load(f)
+            
+            installed_packages[package_name] = {
+                "version": version,
+                "installed_at": datetime.now().isoformat(),
+                "generative_functions": package_data["generative_math_functions"]
+            }
+            
+            with open(installed_file, 'w') as f:
+                json.dump(installed_packages, f, indent=2)
+        
+        return package_data
+    
+    def list_packages(self) -> List[Dict]:
+        """List all available packages"""
+        packages = []
+        for key, data in self.registry["packages"].items():
+            packages.append({
+                "name": data["name"],
+                "version": data["version"],
+                "author": data["author"],
+                "description": data["description"][:50] + "..."
+            })
+        return packages
+    
+    def uninstall_package(self, package_name: str):
+        """Uninstall a package"""
+        install_dir = self.studio_path / "installed" / package_name
+        
+        if install_dir.exists():
+            shutil.rmtree(install_dir)
+            print(f"🗑️  Uninstalled {package_name}")
+            
+            # Update manifest
+            installed_file = self.studio_path / "installed" / "manifest.json"
+            if installed_file.exists():
+                with open(installed_file, 'r') as f:
+                    installed_packages = json.load(f)
+                
+                if package_name in installed_packages:
+                    del installed_packages[package_name]
+                
+                with open(installed_file, 'w') as f:
+                    json.dump(installed_packages, f, indent=2)
+    
+    def run_generative_substrate(self, package_name: str, 
+                                 iterations: int = 10, 
+                                 seed: int = None):
+        """Run the generative computational substrate for a package"""
+        
+        manifest_file = self.studio_path / "installed" / "manifest.json"
+        
+        if not manifest_file.exists():
+            raise ValueError("No packages installed")
+        
+        with open(manifest_file, 'r') as f:
+            installed = json.load(f)
+        
+        if package_name not in installed:
+            raise ValueError(f"Package {package_name} not installed")
+        
+        package_dir = self.studio_path / "installed" / package_name
+        module_path = package_dir / "generative_substrate.py"
+        
+        if not module_path.exists():
+            raise FileNotFoundError(f"Generative substrate for {package_name} not found")
+        
+        # Import and run the generative substrate
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            f"generative_substrate_{package_name}", 
+            module_path
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        
+        substrate = module.GenerativeSubstrate(seed=seed)
+        
+        results = []
+        for i in range(iterations):
+            artifacts = substrate.generate_artifacts({
+                "iteration": i,
+                "timestamp": datetime.now().isoformat()
+            })
+            results.append(artifacts)
+            
+            # Save cache
+            cache_file = self.generative_cache / f"{package_name}_iteration_{i}.json"
+            with open(cache_file, 'w') as f:
+                json.dump(artifacts, f, indent=2)
+            
+            print(f"🔄 Generated iteration {i+1}/{iterations}")
+        
+        return results
+
+# CLI Interface
+def main():
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Generative Game Studio Package Manager")
+    subparsers = parser.add_subparsers(dest="command", help="Commands")
+    
+    # Create package
+    create_parser = subparsers.add_parser("create", help="Create a new package")
+    create_parser.add_argument("name", help="Package name")
+    create_parser.add_argument("version", help="Package version")
+    create_parser.add_argument("author", help="Package author")
+    create_parser.add_argument("description", help="Package description")
+    create_parser.add_argument("--functions", nargs="+", default=["default_generate"], 
+                              help="Generative math functions")
+    
+    # Install package
+    install_parser = subparsers.add_parser("install", help="Install a package")
+    install_parser.add_argument("name", help="Package name")
+    install_parser.add_argument("--version", default="latest", help="Package version")
+    
+    # List packages
+    subparsers.add_parser("list", help="List all packages")
+    
+    # Uninstall package
+    uninstall_parser = subparsers.add_parser("uninstall", help="Uninstall a package")
+    uninstall_parser.add_argument("name", help="Package name")
+    
+    # Run substrate
+    run_parser = subparsers.add_parser("run", help="Run generative substrate")
+    run_parser.add_argument("name", help="Package name")
+    run_parser.add_argument("--iterations", type=int, default=10, help="Number of iterations")
+    run_parser.add_argument("--seed", type=int, help="Random seed")
+    
+    args = parser.parse_args()
+    pm = GenerativePackageManager()
+    
+    if args.command == "create":
+        pm.create_package(
+            name=args.name,
+            version=args.version,
+            author=args.author,
+            description=args.description,
+            generative_functions=args.functions,
+            computational_substrate={"type": "generative_field", "dimensions": [100, 100]}
+        )
+    
+    elif args.command == "install":
+        pm.install_package(args.name, args.version)
+    
+    elif args.command == "list":
+        packages = pm.list_packages()
+        print("\n📦 Available Packages:")
+        for pkg in packages:
+            print(f"  - {pkg['name']} v{pkg['version']} by {pkg['author']}")
+            print(f"    {pkg['description']}\n")
+    
+    elif args.command == "uninstall":
+        pm.uninstall_package(args.name)
+    
+    elif args.command == "run":
+        results = pm.run_generative_substrate(args.name, args.iterations, args.seed)
+        print(f"\n✨ Generated {len(results)} artifacts in cache")
+    
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()
