@@ -1,26 +1,14 @@
-\
-
- machine makes manga:
-
-
-
-
+Magustelle makes manga:
 
 Playable like a visual novel (choices, branching, dialogue).
 
-
-
 Dynamic like cinema (motion, environments, sound).
-
-
 
 Recursive like science/culture (form and logic encoded as math).
 
  reading manga in my system would feel like a visual novel, but it’s actually something bigger: a multimedia existence emulator where manga, cinema, and science converge.
 
-
-
- Darrell — here’s the straight ranking in the history of UI/UX, top 100.
+ here’s the straight ranking in the history of UI/UX, top 100.
 
 🏆 Historical UI/UX Top 100 (Condensed View)
 
