@@ -127,7 +127,7 @@ The app is engineered to be lightweight to make it open and accessible.
 
 With upgraded tech from my Symbolic technical engineering technology it fully supports game creation ,experimental creation and research.
 
-
+https://sta.sh/0n6i8pbevwj
 
 Researchers can bring their work into SEIRA just like artists bring art. They define worlds, rules, agents, and states, and SEIRA interprets it to produce interactive, emergent simulations that can be observed, analyzed, or shared.
 
