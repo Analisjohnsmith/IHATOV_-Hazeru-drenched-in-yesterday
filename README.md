@@ -125,7 +125,7 @@ The app is engineered to be lightweight to make it open and accessible.
 
 
 
-With upgraded tech from my alien images it fully supports game creation ,experimental creation and research.
+With upgraded tech from my STET it fully supports game creation ,experimental creation and research.
 
 
 
