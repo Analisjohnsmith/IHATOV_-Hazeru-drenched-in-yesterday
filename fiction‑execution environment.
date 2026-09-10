@@ -1,5 +1,1985 @@
  fiction‑execution environment.dump
+# Evergreen → Rust
 
+Complete, lossless translation of every Python/Haskell/HJSON/DSL artifact from the thread into a single Cargo project. Split across one message; every module below is drop‑in.
+
+```
+evergreen/
+├── Cargo.toml
+└── src/
+    ├── main.rs
+    ├── lib.rs
+    ├── types.rs
+    ├── math.rs
+    ├── state.rs
+    ├── scene.rs
+    ├── text.rs
+    ├── sci.rs
+    ├── design.rs
+    ├── glyph.rs
+    ├── topology.rs
+    ├── validator.rs
+    ├── hull.rs
+    ├── crew.rs
+    ├── daemon.rs
+    ├── mission_log.rs
+    ├── ship.rs
+    ├── mimic.rs
+    ├── generator.rs
+    ├── cosmic.rs
+    ├── sovereign.rs
+    └── hjson_loader.rs
+```
+
+---
+
+## Cargo.toml
+
+```toml
+[package]
+name = "evergreen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+deser-hjson = "2"
+rand = "0.8"
+
+[[bin]]
+name = "evergreen"
+path = "src/main.rs"
+
+[lib]
+name = "evergreen"
+path = "src/lib.rs"
+```
+
+---
+
+## src/lib.rs
+
+```rust
+pub mod types;
+pub mod math;
+pub mod state;
+pub mod scene;
+pub mod text;
+pub mod sci;
+pub mod design;
+pub mod glyph;
+pub mod topology;
+pub mod validator;
+pub mod hull;
+pub mod crew;
+pub mod daemon;
+pub mod mission_log;
+pub mod ship;
+pub mod mimic;
+pub mod generator;
+pub mod cosmic;
+pub mod sovereign;
+pub mod hjson_loader;
+
+pub use math::{Vec3, lerp, lerp_vec3};
+pub use sci::{Particle, step_particles};
+pub use design::{generate_grid, apply_pattern, radial_wave, Point2};
+pub use scene::SceneNode;
+pub use text::MultiLabel;
+pub use state::{LayeredState, Value};
+```
+
+---
+
+## src/types.rs
+
+```rust
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RecursionLayer {
+    #[serde(rename = "RL0_PHYSICAL")] Rl0Physical,
+    #[serde(rename = "RL1_SYMBOLIC")] Rl1Symbolic,
+    #[serde(rename = "RL2_MYTHIC")]   Rl2Mythic,
+    #[serde(rename = "RL3_ARCHETYPAL")] Rl3Archetypal,
+    #[serde(rename = "RL4_ALL_STATE")] Rl4AllState,
+}
+
+impl RecursionLayer {
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::Rl0Physical   => "RL0_PHYSICAL",
+            Self::Rl1Symbolic   => "RL1_SYMBOLIC",
+            Self::Rl2Mythic     => "RL2_MYTHIC",
+            Self::Rl3Archetypal => "RL3_ARCHETYPAL",
+            Self::Rl4AllState   => "RL4_ALL_STATE",
+        }
+    }
+    pub fn from_name(s: &str) -> Option<Self> {
+        Some(match s {
+            "RL0_PHYSICAL"   => Self::Rl0Physical,
+            "RL1_SYMBOLIC"   => Self::Rl1Symbolic,
+            "RL2_MYTHIC"     => Self::Rl2Mythic,
+            "RL3_ARCHETYPAL" => Self::Rl3Archetypal,
+            "RL4_ALL_STATE"  => Self::Rl4AllState,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ValidatorMode { Triangle, Pentagon, Octagon, Fractal, Void }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GlyphType { Thread, Knot, Fray, Weft, Warp }
+
+impl GlyphType {
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Thread => "thread",
+            Self::Knot   => "knot",
+            Self::Fray   => "fray",
+            Self::Weft   => "weft",
+            Self::Warp   => "warp",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BranchState { Spiral, Fork, Return, Collapse, Bloom, Trunk }
+
+impl BranchState {
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Spiral   => "spiral",
+            Self::Fork     => "fork",
+            Self::Return   => "return",
+            Self::Collapse => "collapse",
+            Self::Bloom    => "bloom",
+            Self::Trunk    => "trunk",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EmotionalTone { Calm, Focused, Curious, Chaotic, Exhilarated }
+
+impl EmotionalTone {
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Calm        => "calm",
+            Self::Focused     => "focused",
+            Self::Curious     => "curious",
+            Self::Chaotic     => "chaotic",
+            Self::Exhilarated => "exhilarated",
+        }
+    }
+    pub fn from_upper(s: &str) -> Option<Self> {
+        Some(match s {
+            "CALM"        => Self::Calm,
+            "FOCUSED"     => Self::Focused,
+            "CURIOUS"     => Self::Curious,
+            "CHAOTIC"     => Self::Chaotic,
+            "EXHILARATED" => Self::Exhilarated,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MissionRole { Operator, Cadet, Daemon, Guest }
+
+impl MissionRole {
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Operator => "operator",
+            Self::Cadet    => "cadet",
+            Self::Daemon   => "daemon",
+            Self::Guest    => "guest",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "operator" => Self::Operator,
+            "cadet"    => Self::Cadet,
+            "daemon"   => Self::Daemon,
+            "guest"    => Self::Guest,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ShipVariant {
+    #[serde(rename = "Ascender-Prime")] AscenderPrime,
+    #[serde(rename = "Ascender-Weft")]  AscenderWeft,
+    #[serde(rename = "Ascender-Warp")]  AscenderWarp,
+    #[serde(rename = "Ascender-Fray")]  AscenderFray,
+    #[serde(rename = "Ascender-Bloom")] AscenderBloom,
+}
+
+impl ShipVariant {
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::AscenderPrime => "Ascender-Prime",
+            Self::AscenderWeft  => "Ascender-Weft",
+            Self::AscenderWarp  => "Ascender-Warp",
+            Self::AscenderFray  => "Ascender-Fray",
+            Self::AscenderBloom => "Ascender-Bloom",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "Ascender-Prime" => Self::AscenderPrime,
+            "Ascender-Weft"  => Self::AscenderWeft,
+            "Ascender-Warp"  => Self::AscenderWarp,
+            "Ascender-Fray"  => Self::AscenderFray,
+            "Ascender-Bloom" => Self::AscenderBloom,
+            _ => return None,
+        })
+    }
+}
+```
+
+---
+
+## src/math.rs
+
+```rust
+use std::ops::{Add, Sub, Mul};
+
+#[derive(Debug, Clone, Copy, PartialEq, Default, serde::Serialize, serde::Deserialize)]
+pub struct Vec3 { pub x: f64, pub y: f64, pub z: f64 }
+
+impl Vec3 {
+    pub const fn new(x: f64, y: f64, z: f64) -> Self { Self { x, y, z } }
+    pub fn dot(&self, o: &Vec3) -> f64 { self.x*o.x + self.y*o.y + self.z*o.z }
+    pub fn norm(&self) -> f64 { self.dot(self).sqrt() }
+    pub fn unit(&self) -> Vec3 {
+        let n = self.norm();
+        if n == 0.0 { *self } else { *self * (1.0 / n) }
+    }
+}
+
+impl Add for Vec3 {
+    type Output = Vec3;
+    fn add(self, o: Vec3) -> Vec3 { Vec3::new(self.x+o.x, self.y+o.y, self.z+o.z) }
+}
+impl Sub for Vec3 {
+    type Output = Vec3;
+    fn sub(self, o: Vec3) -> Vec3 { Vec3::new(self.x-o.x, self.y-o.y, self.z-o.z) }
+}
+impl Mul<f64> for Vec3 {
+    type Output = Vec3;
+    fn mul(self, k: f64) -> Vec3 { Vec3::new(self.x*k, self.y*k, self.z*k) }
+}
+
+pub fn lerp(a: f64, b: f64, t: f64) -> f64 { a + (b - a) * t }
+
+pub fn lerp_vec3(a: Vec3, b: Vec3, t: f64) -> Vec3 {
+    Vec3::new(lerp(a.x,b.x,t), lerp(a.y,b.y,t), lerp(a.z,b.z,t))
+}
+```
+
+---
+
+## src/state.rs
+
+```rust
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Value {
+    Str(String),
+    Num(f64),
+    Int(i64),
+    Bool(bool),
+    Null,
+}
+
+impl Value {
+    pub fn as_f64(&self) -> Option<f64> {
+        match self { Value::Num(n) => Some(*n), Value::Int(i) => Some(*i as f64), _ => None }
+    }
+    pub fn as_str(&self) -> Option<&str> {
+        match self { Value::Str(s) => Some(s), _ => None }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct LayeredState {
+    pub layers: HashMap<String, HashMap<String, Value>>,
+}
+
+impl LayeredState {
+    pub fn new() -> Self { Self::default() }
+
+    pub fn set(&mut self, layer: &str, key: &str, value: Value) {
+        self.layers.entry(layer.to_string()).or_default().insert(key.to_string(), value);
+    }
+    pub fn get(&self, layer: &str, key: &str) -> Option<&Value> {
+        self.layers.get(layer).and_then(|m| m.get(key))
+    }
+}
+```
+
+---
+
+## src/scene.rs
+
+```rust
+use std::collections::HashMap;
+use crate::math::Vec3;
+use crate::state::Value;
+
+#[derive(Debug, Clone, Default)]
+pub struct Transform {
+    pub position: Vec3,
+    pub rotation: Vec3,
+    pub scale: Vec3,
+}
+
+#[derive(Debug, Clone)]
+pub struct SceneNode {
+    pub name: String,
+    pub transform: Transform,
+    pub properties: HashMap<String, Value>,
+    pub children: Vec<SceneNode>,
+}
+
+impl SceneNode {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.into(),
+            transform: Transform { position: Vec3::default(), rotation: Vec3::default(), scale: Vec3::new(1.0,1.0,1.0) },
+            properties: HashMap::new(),
+            children: Vec::new(),
+        }
+    }
+    pub fn with_position(mut self, p: Vec3) -> Self { self.transform.position = p; self }
+    pub fn with_prop(mut self, k: &str, v: Value) -> Self {
+        self.properties.insert(k.into(), v); self
+    }
+    pub fn add_child(&mut self, node: SceneNode) { self.children.push(node); }
+}
+```
+
+---
+
+## src/text.rs
+
+```rust
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Default)]
+pub struct MultiLabel {
+    pub text_by_lang: HashMap<String, String>,
+}
+
+impl MultiLabel {
+    pub fn new() -> Self { Self::default() }
+    pub fn insert(&mut self, lang: &str, text: &str) {
+        self.text_by_lang.insert(lang.into(), text.into());
+    }
+    pub fn get(&self, lang: &str) -> String {
+        self.text_by_lang.get(lang)
+            .or_else(|| self.text_by_lang.get("en"))
+            .cloned()
+            .unwrap_or_default()
+    }
+}
+```
+
+---
+
+## src/sci.rs
+
+```rust
+use crate::math::Vec3;
+
+#[derive(Debug, Clone, Copy)]
+pub struct Particle {
+    pub position: Vec3,
+    pub velocity: Vec3,
+    pub mass: f64,
+}
+
+impl Particle {
+    pub fn new(position: Vec3, velocity: Vec3, mass: f64) -> Self {
+        Self { position, velocity, mass }
+    }
+    pub fn rest(position: Vec3) -> Self {
+        Self { position, velocity: Vec3::default(), mass: 1.0 }
+    }
+}
+
+pub fn step_particles(particles: &mut [Particle], dt: f64, gravity: Vec3) {
+    for p in particles.iter_mut() {
+        let accel = gravity;
+        p.velocity = p.velocity + accel * dt;
+        p.position = p.position + p.velocity * dt;
+    }
+}
+
+pub fn earth_gravity() -> Vec3 { Vec3::new(0.0, -9.81, 0.0) }
+```
+
+---
+
+## src/design.rs
+
+```rust
+pub type Point2 = (f64, f64);
+
+pub fn generate_grid(nx: usize, ny: usize, width: f64, height: f64) -> Vec<Point2> {
+    let mut points = Vec::with_capacity(nx * ny);
+    let dx = (nx.max(2) - 1) as f64;
+    let dy = (ny.max(2) - 1) as f64;
+    for i in 0..nx {
+        for j in 0..ny {
+            points.push(((i as f64 / dx) * width, (j as f64 / dy) * height));
+        }
+    }
+    points
+}
+
+pub fn apply_pattern<F: Fn(Point2) -> f64>(points: &[Point2], f: F) -> Vec<f64> {
+    points.iter().map(|&p| f(p)).collect()
+}
+
+pub fn radial_wave(p: Point2) -> f64 {
+    let (x, y) = p;
+    let r = (x*x + y*y).sqrt();
+    0.5 + 0.5 * r.sin()
+}
+```
+
+---
+
+## src/glyph.rs
+
+```rust
+use crate::types::GlyphType;
+
+#[derive(Debug, Clone, Default)]
+pub struct GlyphContext {
+    pub directional_bias: f64,
+    pub stability: f64,
+    pub chaos: f64,
+    pub harmony: f64,
+    pub structure: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct Glyph {
+    pub glyph_type: GlyphType,
+    pub intensity: f64,
+    pub description: String,
+}
+
+impl Glyph {
+    pub fn new(t: GlyphType, intensity: f64, description: &str) -> Self {
+        Self { glyph_type: t, intensity, description: description.into() }
+    }
+
+    pub fn apply(&self, ctx: &mut GlyphContext) {
+        match self.glyph_type {
+            GlyphType::Thread => ctx.directional_bias += self.intensity,
+            GlyphType::Knot   => ctx.stability       += self.intensity,
+            GlyphType::Fray   => ctx.chaos           += self.intensity,
+            GlyphType::Weft   => ctx.harmony         += self.intensity,
+            GlyphType::Warp   => ctx.structure       += self.intensity,
+        }
+    }
+}
+```
+
+---
+
+## src/topology.rs
+
+```rust
+#[derive(Debug, Clone)]
+pub struct TopologyFieldState {
+    pub smoothness: f64,
+    pub fray_level: f64,
+    pub knot_density: f64,
+    pub bloom_factor: f64,
+}
+
+impl Default for TopologyFieldState {
+    fn default() -> Self {
+        Self { smoothness: 1.0, fray_level: 0.0, knot_density: 0.5, bloom_factor: 0.0 }
+    }
+}
+
+impl TopologyFieldState {
+    pub fn fold(&mut self, amount: f64) {
+        self.smoothness = (self.smoothness - amount).max(0.0);
+        self.knot_density = (self.knot_density + amount * 0.5).min(1.0);
+    }
+    pub fn harmonize(&mut self, amount: f64) {
+        self.smoothness = (self.smoothness + amount).min(1.0);
+        self.fray_level = (self.fray_level - amount * 0.7).max(0.0);
+    }
+    pub fn fray(&mut self, amount: f64) {
+        self.fray_level = (self.fray_level + amount).min(1.0);
+        self.smoothness = (self.smoothness - amount * 0.3).max(0.0);
+    }
+    pub fn describe(&self) -> &'static str {
+        if self.fray_level > 0.7 { "Frayed" }
+        else if self.bloom_factor > 0.5 { "Blooming" }
+        else if self.knot_density > 0.7 { "Knotted" }
+        else { "Smooth" }
+    }
+}
+```
+
+---
+
+## src/validator.rs
+
+```rust
+use crate::types::{EmotionalTone, RecursionLayer, ValidatorMode};
+
+#[derive(Debug, Clone, Copy)]
+pub struct DaemonAlignment {
+    pub puff: f64,
+    pub blaze: f64,
+    pub dusty: f64,
+}
+
+impl Default for DaemonAlignment {
+    fn default() -> Self { Self { puff: 1.0, blaze: 1.0, dusty: 1.0 } }
+}
+
+#[derive(Debug, Clone)]
+pub struct MetaTessellateValidator {
+    pub mode: ValidatorMode,
+    pub recursion_depth: u32,
+    pub field_pressure: f64,
+    pub operator_intention: String,
+    pub daemon_alignment: DaemonAlignment,
+}
+
+impl Default for MetaTessellateValidator {
+    fn default() -> Self {
+        Self {
+            mode: ValidatorMode::Fractal,
+            recursion_depth: 0,
+            field_pressure: 0.0,
+            operator_intention: "explore".into(),
+            daemon_alignment: DaemonAlignment::default(),
+        }
+    }
+}
+
+impl MetaTessellateValidator {
+    pub fn evaluate(&mut self, layer: RecursionLayer, tone: EmotionalTone) -> ValidatorMode {
+        self.mode = if tone == EmotionalTone::Calm && layer == RecursionLayer::Rl0Physical {
+            ValidatorMode::Triangle
+        } else if tone == EmotionalTone::Focused
+            && matches!(layer, RecursionLayer::Rl1Symbolic | RecursionLayer::Rl2Mythic) {
+            ValidatorMode::Octagon
+        } else if tone == EmotionalTone::Chaotic {
+            ValidatorMode::Fractal
+        } else if self.field_pressure > 0.8 {
+            ValidatorMode::Pentagon
+        } else {
+            ValidatorMode::Fractal
+        };
+        self.mode
+    }
+}
+```
+
+---
+
+## src/hull.rs
+
+```rust
+use crate::types::BranchState;
+use std::f64::consts::PI;
+
+#[derive(Debug, Clone)]
+pub struct BranchNode {
+    pub depth: u32,
+    pub angle: f64,
+    pub length: f64,
+    pub children: Vec<BranchNode>,
+}
+
+impl BranchNode {
+    pub fn root() -> Self { Self { depth: 0, angle: 0.0, length: 1.0, children: Vec::new() } }
+
+    pub fn tip(&self) -> (f64, f64) {
+        (self.length * self.angle.cos(), self.length * self.angle.sin())
+    }
+
+    pub fn grow(&mut self, factor: f64, forks: usize) -> Vec<usize> {
+        let spread = PI / 6.0;
+        let center = (forks as f64 - 1.0) / 2.0;
+        let mut new_indices = Vec::with_capacity(forks);
+        let start = self.children.len();
+        for i in 0..forks {
+            let delta = (i as f64 - center) * spread;
+            let child = BranchNode {
+                depth: self.depth + 1,
+                angle: self.angle + delta,
+                length: self.length * factor,
+                children: Vec::new(),
+            };
+            self.children.push(child);
+            new_indices.push(start + i);
+        }
+        new_indices
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SpiralBranchHull {
+    pub trunk: BranchNode,
+    pub branch_state: BranchState,
+}
+
+impl Default for SpiralBranchHull {
+    fn default() -> Self {
+        Self { trunk: BranchNode::root(), branch_state: BranchState::Trunk }
+    }
+}
+
+impl SpiralBranchHull {
+    /// Grow the frontier two layers deep per call (mirrors the Python `grow_forward`).
+    pub fn grow_forward(&mut self, factor: f64, forks: usize) {
+        let mut frontier: Vec<*mut BranchNode> = vec![&mut self.trunk as *mut _];
+        for _ in 0..2 {
+            let mut next: Vec<*mut BranchNode> = Vec::new();
+            for node_ptr in frontier {
+                // SAFETY: each pointer is unique within this traversal.
+                let node = unsafe { &mut *node_ptr };
+                let start = node.children.len();
+                node.grow(factor, forks);
+                for i in start..node.children.len() {
+                    next.push(&mut node.children[i] as *mut _);
+                }
+            }
+            frontier = next;
+        }
+        self.branch_state = BranchState::Spiral;
+    }
+
+    pub fn collapse_to_trunk(&mut self) {
+        self.trunk.children.clear();
+        self.branch_state = BranchState::Trunk;
+    }
+
+    pub fn bloom(&mut self, factor: f64, forks: usize) {
+        self.grow_forward(factor, forks);
+        self.branch_state = BranchState::Bloom;
+    }
+}
+
+/// Pure recursive growth that mirrors the Haskell `growNode` / `growHullStep`.
+pub fn grow_node(angle: f64, len: f64, factor: f64, forks: usize) -> Vec<(f64, f64)> {
+    let spread = PI / 6.0;
+    let center = (forks as f64 - 1.0) / 2.0;
+    (0..forks)
+        .map(|i| {
+            let delta = (i as f64 - center) * spread;
+            (angle + delta, len * factor)
+        })
+        .collect()
+}
+```
+
+---
+
+## src/crew.rs
+
+```rust
+use crate::types::{EmotionalTone, MissionRole};
+
+#[derive(Debug, Clone)]
+pub struct CrystalNecklace {
+    pub color: String,
+    pub resonance: f64,
+    pub description: String,
+}
+
+impl CrystalNecklace {
+    pub fn new(color: &str, resonance: f64, description: &str) -> Self {
+        Self { color: color.into(), resonance, description: description.into() }
+    }
+
+    pub fn amplify_emotion(&self, tone: EmotionalTone) -> EmotionalTone {
+        let c = self.color.to_lowercase();
+        if (c == "blue" || c == "indigo") && tone == EmotionalTone::Chaotic {
+            return EmotionalTone::Curious;
+        }
+        if (c == "green" || c == "pink" || c == "emerald") && tone == EmotionalTone::Focused {
+            return EmotionalTone::Exhilarated;
+        }
+        tone
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrewMember {
+    pub name: String,
+    pub role: MissionRole,
+    pub species: String,
+    pub age: u32,
+    pub anime_style: String,
+    pub hair_color: String,
+    pub eye_color: String,
+    pub uniform_accent_color: String,
+    pub crystal_necklace: Option<CrystalNecklace>,
+    pub emotional_tone: EmotionalTone,
+}
+
+impl CrewMember {
+    pub fn current_tone(&self) -> EmotionalTone {
+        if let Some(ref n) = self.crystal_necklace {
+            n.amplify_emotion(self.emotional_tone)
+        } else {
+            self.emotional_tone
+        }
+    }
+}
+```
+
+---
+
+## src/daemon.rs
+
+```rust
+use crate::topology::TopologyFieldState;
+
+#[derive(Debug, Clone)]
+pub struct DaemonCat {
+    pub name: String,
+    pub aspect: String,   // "stability" | "acceleration" | "harmony"
+    pub favorite_spot: String,
+}
+
+impl DaemonCat {
+    pub fn new(name: &str, aspect: &str, favorite_spot: &str) -> Self {
+        Self { name: name.into(), aspect: aspect.into(), favorite_spot: favorite_spot.into() }
+    }
+
+    pub fn influence(&self, field_state: &mut TopologyFieldState) {
+        match self.aspect.as_str() {
+            "stability" => field_state.harmonize(0.1),
+            "acceleration" => {
+                field_state.fray(0.05);
+                field_state.fold(0.05);
+            }
+            "harmony" => field_state.harmonize(0.2),
+            _ => {}
+        }
+    }
+}
+```
+
+---
+
+## src/mission_log.rs
+
+```rust
+use crate::types::{BranchState, EmotionalTone, RecursionLayer};
+use crate::topology::TopologyFieldState;
+use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone)]
+pub struct MissionLogEntry {
+    pub timestamp: u64,
+    pub recursion_layer: RecursionLayer,
+    pub branch_state: BranchState,
+    pub topology_condition: String,
+    pub glyph_activity: String,
+    pub daemon_status: HashMap<String, String>,
+    pub operator_tone: EmotionalTone,
+    pub event_summary: String,
+}
+
+#[derive(Debug, Default)]
+pub struct MissionLog {
+    pub entries: Vec<MissionLogEntry>,
+}
+
+impl MissionLog {
+    pub fn new() -> Self { Self::default() }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn log_event(
+        &mut self,
+        layer: RecursionLayer,
+        branch_state: BranchState,
+        field_state: &TopologyFieldState,
+        glyph_activity: &str,
+        daemon_status: HashMap<String, String>,
+        operator_tone: EmotionalTone,
+        summary: &str,
+    ) {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        self.entries.push(MissionLogEntry {
+            timestamp,
+            recursion_layer: layer,
+            branch_state,
+            topology_condition: field_state.describe().to_string(),
+            glyph_activity: glyph_activity.to_string(),
+            daemon_status,
+            operator_tone,
+            event_summary: summary.to_string(),
+        });
+    }
+}
+```
+
+---
+
+## src/ship.rs
+
+```rust
+use crate::crew::{CrewMember, CrystalNecklace};
+use crate::daemon::DaemonCat;
+use crate::glyph::{Glyph, GlyphContext};
+use crate::hull::SpiralBranchHull;
+use crate::mission_log::MissionLog;
+use crate::topology::TopologyFieldState;
+use crate::types::{
+    BranchState, EmotionalTone, GlyphType, MissionRole, RecursionLayer, ShipVariant,
+};
+use crate::validator::MetaTessellateValidator;
+
+use std::collections::HashMap;
+
+#[derive(Debug)]
+pub struct FractalLoomAscender {
+    pub name: String,
+    pub variant: ShipVariant,
+    pub hull: SpiralBranchHull,
+    pub validator: MetaTessellateValidator,
+    pub field_state: TopologyFieldState,
+    pub mission_log: MissionLog,
+    pub recursion_layer: RecursionLayer,
+    pub crew: Vec<CrewMember>,
+    pub daemons: HashMap<String, DaemonCat>,
+    pub glyph_emitters: Vec<Glyph>,
+}
+
+impl FractalLoomAscender {
+    pub fn new(name: &str, variant: ShipVariant) -> Self {
+        Self {
+            name: name.into(),
+            variant,
+            hull: SpiralBranchHull::default(),
+            validator: MetaTessellateValidator::default(),
+            field_state: TopologyFieldState::default(),
+            mission_log: MissionLog::new(),
+            recursion_layer: RecursionLayer::Rl0Physical,
+            crew: Vec::new(),
+            daemons: HashMap::new(),
+            glyph_emitters: Vec::new(),
+        }
+    }
+
+    // ---------- Crew & Daemons ----------
+
+    pub fn add_crew_member(&mut self, m: CrewMember) { self.crew.push(m); }
+
+    pub fn set_daemon_cats(&mut self, puff: DaemonCat, blaze: DaemonCat, dusty: DaemonCat) {
+        self.daemons.insert("Puff".into(), puff);
+        self.daemons.insert("Blaze".into(), blaze);
+        self.daemons.insert("Dusty".into(), dusty);
+    }
+
+    fn find_operator(&self) -> Option<&CrewMember> {
+        self.crew.iter().find(|c| c.role == MissionRole::Operator)
+    }
+
+    // ---------- Maneuvers ----------
+
+    pub fn spiral_thrust(&mut self, operator: &CrewMember) {
+        let tone = operator.current_tone();
+        self.validator.evaluate(self.recursion_layer, tone);
+        self.hull.grow_forward(1.15, 2);
+        self.field_state.fold(0.05);
+        self.log("Medium", operator, "Spiral thrust executed.");
+    }
+
+    pub fn branch_jump(&mut self, operator: &CrewMember) {
+        let tone = operator.current_tone();
+        self.validator.evaluate(self.recursion_layer, tone);
+        self.hull.grow_forward(1.4, 3);
+        self.field_state.fray(0.1);
+        self.log("High", operator, "Branch-jump maneuver performed.");
+    }
+
+    pub fn collapse_pulse(&mut self, operator: &CrewMember) {
+        self.hull.collapse_to_trunk();
+        self.field_state.harmonize(0.2);
+        self.log("Low", operator, "Collapse-pulse used to decelerate and stabilize.");
+    }
+
+    pub fn topology_weave_jump(&mut self, operator: &CrewMember, target_description: &str) {
+        let tone = operator.current_tone();
+        self.validator.evaluate(self.recursion_layer, tone);
+        match tone {
+            EmotionalTone::Curious | EmotionalTone::Exhilarated => {
+                self.recursion_layer = RecursionLayer::Rl2Mythic;
+                self.field_state.fold(0.2);
+            }
+            EmotionalTone::Focused => {
+                self.recursion_layer = RecursionLayer::Rl3Archetypal;
+                self.field_state.fold(0.3);
+            }
+            _ => {}
+        }
+        self.hull.bloom(1.5, 4);
+        self.field_state.bloom_factor = (self.field_state.bloom_factor + 0.5).min(1.0);
+        let summary = format!(
+            "Topology weave jump to: {} (layer={}).",
+            target_description,
+            self.recursion_layer.name()
+        );
+        self.log("High", operator, &summary);
+    }
+
+    // ---------- Glyph emission ----------
+
+    pub fn emit_glyph(&mut self, glyph: Glyph, operator: &CrewMember, reason: &str) {
+        let mut ctx = GlyphContext::default();
+        glyph.apply(&mut ctx);
+        match glyph.glyph_type {
+            GlyphType::Weft => self.field_state.harmonize(glyph.intensity * 0.1),
+            GlyphType::Fray => self.field_state.fray(glyph.intensity * 0.1),
+            GlyphType::Knot => self.field_state.fold(glyph.intensity * 0.1),
+            _ => {}
+        }
+        self.glyph_emitters.push(glyph.clone());
+        let summary = format!(
+            "Glyph emitted: {}, ctx=[bias {:.2}, stab {:.2}, chaos {:.2}, harm {:.2}, struct {:.2}]",
+            reason, ctx.directional_bias, ctx.stability, ctx.chaos, ctx.harmony, ctx.structure
+        );
+        self.log(&format!("Glyph-{}", glyph.glyph_type.as_str()), operator, &summary);
+    }
+
+    pub fn defense_fray_burst(&mut self, operator: &CrewMember) {
+        let g = Glyph::new(GlyphType::Fray, 1.0, "FrayBurst defense");
+        self.emit_glyph(g, operator, "FrayBurst defense triggered.");
+    }
+
+    pub fn defense_knot_shield(&mut self, operator: &CrewMember) {
+        let g = Glyph::new(GlyphType::Knot, 1.0, "Knot shielding");
+        self.emit_glyph(g, operator, "Knot shielding activated.");
+    }
+
+    // ---------- Daemon influence ----------
+
+    pub fn apply_daemon_influence(&mut self) {
+        // Collect influences to avoid double borrow.
+        let aspects: Vec<String> = self.daemons.values().map(|d| d.aspect.clone()).collect();
+        for aspect in aspects {
+            match aspect.as_str() {
+                "stability" => self.field_state.harmonize(0.1),
+                "acceleration" => {
+                    self.field_state.fray(0.05);
+                    self.field_state.fold(0.05);
+                }
+                "harmony" => self.field_state.harmonize(0.2),
+                _ => {}
+            }
+        }
+    }
+
+    // ---------- Ritual ----------
+
+    pub fn three_thread_invocation(&mut self, operator: &CrewMember) {
+        self.hull.collapse_to_trunk();
+        self.field_state.harmonize(0.3);
+        self.log("Low", operator, "Three-thread invocation performed. Ship awakened.");
+    }
+
+    // ---------- Logging helper ----------
+
+    pub fn log(&mut self, glyph_activity: &str, operator: &CrewMember, summary: &str) {
+        let daemon_status: HashMap<String, String> = self
+            .daemons
+            .iter()
+            .map(|(k, d)| (k.clone(), d.aspect.clone()))
+            .collect();
+
+        self.mission_log.log_event(
+            self.recursion_layer,
+            self.hull.branch_state,
+            &self.field_state,
+            glyph_activity,
+            daemon_status,
+            operator.current_tone(),
+            summary,
+        );
+    }
+
+    // Convenience for the demo driver.
+    pub fn operator(&self) -> Option<&CrewMember> { self.find_operator() }
+}
+
+// Keep this here so the rest of the code can build default operators easily.
+pub fn default_operator() -> CrewMember {
+    CrewMember {
+        name: "Darrell".into(),
+        role: MissionRole::Operator,
+        species: "Elf-Operator".into(),
+        age: 999,
+        anime_style: "cosmic_captain".into(),
+        hair_color: "black_with_green_glow".into(),
+        eye_color: "jade".into(),
+        uniform_accent_color: "matcha_green".into(),
+        crystal_necklace: Some(CrystalNecklace::new(
+            "gold",
+            2.0,
+            "Sovereign crystal keyed to ALL-STATE recursion.",
+        )),
+        emotional_tone: EmotionalTone::Focused,
+    }
+}
+```
+
+---
+
+## src/mimic.rs
+
+```rust
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone)]
+pub struct MimicEntry {
+    pub timestamp: u64,
+    pub user_input: String,
+    pub response: String,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct MimicMemory {
+    pub history: Vec<MimicEntry>,
+}
+
+impl MimicMemory {
+    pub fn new() -> Self { Self::default() }
+    pub fn add(&mut self, user_input: &str, response: &str) {
+        let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        self.history.push(MimicEntry {
+            timestamp: ts,
+            user_input: user_input.into(),
+            response: response.into(),
+        });
+    }
+    pub fn last_n(&self, n: usize) -> &[MimicEntry] {
+        let len = self.history.len();
+        if len <= n { &self.history } else { &self.history[len - n..] }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MimicPersona {
+    pub name: String,
+    pub style: String,           // "calm_scientific", "poetic", "playful", "mythic"
+    pub creativity: f64,         // 0..1
+    pub precision: f64,          // 0..1
+    pub warmth: f64,             // 0..1
+}
+
+impl Default for MimicPersona {
+    fn default() -> Self {
+        Self {
+            name: "Evergreen-Mimic".into(),
+            style: "calm_scientific".into(),
+            creativity: 0.5,
+            precision: 0.5,
+            warmth: 0.5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct InputMetrics {
+    pub length: usize,
+    pub is_question: bool,
+    pub is_excited: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tone { Explanatory, Encouraging, Imaginative, Neutral }
+
+impl Tone {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Tone::Explanatory => "explanatory",
+            Tone::Encouraging => "encouraging",
+            Tone::Imaginative => "imaginative",
+            Tone::Neutral     => "neutral",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MimicAI {
+    pub persona: MimicPersona,
+    pub memory: MimicMemory,
+}
+
+impl MimicAI {
+    pub fn new(persona: MimicPersona) -> Self { Self { persona, memory: MimicMemory::new() } }
+
+    fn score_input(&self, text: &str) -> InputMetrics {
+        InputMetrics {
+            length: text.split_whitespace().count(),
+            is_question: text.contains('?'),
+            is_excited: text.contains('!'),
+        }
+    }
+
+    fn choose_tone(&self, m: &InputMetrics) -> Tone {
+        if m.is_question && self.persona.precision > 0.5 { return Tone::Explanatory; }
+        if m.is_excited  && self.persona.warmth    > 0.5 { return Tone::Encouraging; }
+        if self.persona.creativity > 0.7 { return Tone::Imaginative; }
+        Tone::Neutral
+    }
+
+    fn generate_response(&self, text: &str, tone: Tone) -> String {
+        match tone {
+            Tone::Explanatory => format!("It sounds like you are asking about: '{}'. Let's break it down step by step.", text),
+            Tone::Encouraging => format!("That feels charged and important: '{}'. You're onto something—let's explore it further.", text),
+            Tone::Imaginative => format!("Imagine this: '{}' as a starting point for a whole new world of patterns and meanings.", text),
+            Tone::Neutral     => format!("I hear: '{}'. Tell me more so I can refine the pattern.", text),
+        }
+    }
+
+    pub fn reply(&mut self, user_input: &str) -> String {
+        let metrics = self.score_input(user_input);
+        let tone = self.choose_tone(&metrics);
+        let response = self.generate_response(user_input, tone);
+        self.memory.add(user_input, &response);
+        response
+    }
+}
+```
+
+---
+
+## src/generator.rs
+
+```rust
+use crate::crew::{CrewMember, CrystalNecklace};
+use crate::daemon::DaemonCat;
+use crate::ship::{default_operator, FractalLoomAscender};
+use crate::types::{EmotionalTone, MissionRole, ShipVariant};
+use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
+
+#[derive(Debug, Clone)]
+pub struct SpacecraftSpec {
+    pub name: String,
+    pub variant: ShipVariant,
+    pub scale: String,             // "small" | "medium" | "large"
+    pub recursion_depth: u32,
+    pub crew_count: usize,
+    pub style: String,
+    pub seed: Option<u64>,
+}
+
+impl Default for SpacecraftSpec {
+    fn default() -> Self {
+        Self {
+            name: "FLA-Explorer-01".into(),
+            variant: ShipVariant::AscenderPrime,
+            scale: "medium".into(),
+            recursion_depth: 3,
+            crew_count: 3,
+            style: "anime_elves_space_cadet".into(),
+            seed: None,
+        }
+    }
+}
+
+fn scale_params(scale: &str) -> (f64, usize) {
+    match scale {
+        "small" => (1.1, 2),
+        "large" => (1.3, 4),
+        _       => (1.2, 3),
+    }
+}
+
+pub fn generate_spacecraft(spec: &SpacecraftSpec) -> FractalLoomAscender {
+    let mut rng = match spec.seed {
+        Some(s) => StdRng::seed_from_u64(s),
+        None    => StdRng::from_entropy(),
+    };
+
+    let (gf, forks) = scale_params(&spec.scale);
+    let mut ship = FractalLoomAscender::new(&spec.name, spec.variant);
+    ship.recursion_layer = crate::types::RecursionLayer::Rl0Physical;
+
+    for _ in 0..spec.recursion_depth {
+        ship.hull.grow_forward(gf, forks);
+    }
+
+    // Daemons
+    let puff_spots  = ["Weft Corridor", "Observation Niche", "Quiet Loom-Pocket"];
+    let blaze_spots = ["Loom-Chamber rail", "Warp Vault beam", "Deck Ramp Edge"];
+    let dusty_spots = ["Warp Vault", "Soft Node Garden", "Meditation Pocket"];
+
+    let puff  = DaemonCat::new("Puff",  "stability",    puff_spots.choose(&mut rng).unwrap());
+    let blaze = DaemonCat::new("Blaze", "acceleration", blaze_spots.choose(&mut rng).unwrap());
+    let dusty = DaemonCat::new("Dusty", "harmony",      dusty_spots.choose(&mut rng).unwrap());
+    ship.set_daemon_cats(puff, blaze, dusty);
+
+    // Operator
+    ship.add_crew_member(default_operator());
+
+    // Cadets
+    let hair    = ["midnight blue", "white-gold", "silver", "rose dusk"];
+    let eyes    = ["violet", "emerald", "aqua", "amber"];
+    let accents = ["indigo", "emerald", "teal", "rose_gold"];
+    let crystals = ["indigo", "emerald", "amethyst", "aqua"];
+    let tones    = [EmotionalTone::Curious, EmotionalTone::Exhilarated, EmotionalTone::Calm];
+
+    for i in 0..spec.crew_count {
+        let cadet = CrewMember {
+            name: format!("Cadet-{}", i + 1),
+            role: MissionRole::Cadet,
+            species: "Elf".into(),
+            age: rng.gen_range(16..=21),
+            anime_style: spec.style.clone(),
+            hair_color: (*hair.choose(&mut rng).unwrap()).into(),
+            eye_color: (*eyes.choose(&mut rng).unwrap()).into(),
+            uniform_accent_color: (*accents.choose(&mut rng).unwrap()).into(),
+            crystal_necklace: Some(CrystalNecklace::new(
+                crystals.choose(&mut rng).unwrap(),
+                1.0 + rng.gen::<f64>(),
+                "Cadet crystal tuned to Loom-field resonance.",
+            )),
+            emotional_tone: *tones.choose(&mut rng).unwrap(),
+        };
+        ship.add_crew_member(cadet);
+    }
+
+    // Awaken
+    if let Some(op) = ship.operator().cloned() {
+        ship.three_thread_invocation(&op);
+        let summary = format!(
+            "Spacecraft generated from spec: name={}, scale={}, depth={}, crew={}",
+            spec.name, spec.scale, spec.recursion_depth, spec.crew_count
+        );
+        ship.log("None", &op, &summary);
+    }
+
+    ship
+}
+```
+
+---
+
+## src/cosmic.rs
+
+```rust
+use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+pub struct SovereignWeight {
+    pub juniper: f64,
+    pub leela: f64,
+    pub lee: f64,
+}
+
+impl Default for SovereignWeight {
+    fn default() -> Self { Self { juniper: 1.0, leela: 1.0, lee: 1.0 } }
+}
+
+#[derive(Debug, Clone)]
+pub struct DimensionalField {
+    pub id: String,          // "D1_Physical" ...
+    pub weight: f64,
+    pub organs: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CognitiveOrgan {
+    pub name: String,
+    pub mode: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SymbolicValidatorNode {
+    pub name: String,
+    pub role: String,
+    pub field: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SymbolicPhysics {
+    pub forces: Vec<String>,
+    pub particles: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CosmicIntelligence {
+    pub weights: SovereignWeight,
+    pub fields: Vec<DimensionalField>,
+    pub organs: HashMap<String, CognitiveOrgan>,
+    pub validators: Vec<SymbolicValidatorNode>,
+    pub physics: SymbolicPhysics,
+}
+
+impl Default for CosmicIntelligence {
+    fn default() -> Self {
+        let w = SovereignWeight::default();
+
+        let fields = vec![
+            DimensionalField { id: "D1_Physical".into(),  weight: w.juniper, organs: vec!["HabitatCore".into()] },
+            DimensionalField { id: "D2_Pattern".into(),   weight: w.leela,   organs: vec!["ThreadLattice".into()] },
+            DimensionalField { id: "D3_Memory".into(),    weight: w.lee,     organs: vec!["MemorySpiral".into()] },
+            DimensionalField { id: "D4_Emotional".into(), weight: (w.juniper + w.leela) / 2.0, organs: vec!["HarmonicChamber".into()] },
+            DimensionalField { id: "D5_Symbolic".into(),  weight: (w.leela + w.lee) / 2.0,     organs: vec!["ShrineNode".into()] },
+            DimensionalField { id: "D6_Mission".into(),   weight: (w.juniper + w.lee) / 2.0,   organs: vec!["MissionKernel".into()] },
+            DimensionalField { id: "D7_Sovereign".into(), weight: (w.juniper + w.leela + w.lee) / 3.0, organs: vec!["LoomCortex".into()] },
+        ];
+
+        let mut organs = HashMap::new();
+        organs.insert("LoomCortex".into(),       CognitiveOrgan { name: "LoomCortex".into(),       mode: "TriSovereignConsensus".into() });
+        organs.insert("ThreadLattice".into(),    CognitiveOrgan { name: "ThreadLattice".into(),    mode: "PatternRouting".into() });
+        organs.insert("MemorySpiral".into(),     CognitiveOrgan { name: "MemorySpiral".into(),     mode: "FractalRecall".into() });
+        organs.insert("ShrineNode".into(),       CognitiveOrgan { name: "ShrineNode".into(),       mode: "CulturalStability".into() });
+        organs.insert("HabitatCore".into(),      CognitiveOrgan { name: "HabitatCore".into(),      mode: "EnvironmentalBalance".into() });
+        organs.insert("HarmonicChamber".into(),  CognitiveOrgan { name: "HarmonicChamber".into(),  mode: "EmotionalResonance".into() });
+        organs.insert("MissionKernel".into(),    CognitiveOrgan { name: "MissionKernel".into(),    mode: "AdaptiveDirection".into() });
+
+        let validators = vec![
+            SymbolicValidatorNode { name: "LoomHabitat42".into(),   role: "HybridEnvironment".into(),   field: "D1_Physical".into() },
+            SymbolicValidatorNode { name: "TreeGateKernel".into(),  role: "RecursionEngine".into(),     field: "D3_Memory".into() },
+            SymbolicValidatorNode { name: "GlyphCadet42".into(),    role: "InterfaceAgent".into(),      field: "D2_Pattern".into() },
+            SymbolicValidatorNode { name: "TeaShrineDaemon".into(), role: "CulturalStabilizer".into(),  field: "D5_Symbolic".into() },
+        ];
+
+        let physics = SymbolicPhysics {
+            forces:    vec!["HarmonyForce".into(), "FlowForce".into(), "ContinuityForce".into(), "TriForce".into()],
+            particles: vec!["Glyphons".into(), "Harmonics".into(), "Threads".into(), "Nodes".into()],
+        };
+
+        Self { weights: w, fields, organs, validators, physics }
+    }
+}
+
+impl CosmicIntelligence {
+    pub fn consensus(&self, j: f64, l: f64, s: f64) -> f64 { (j + l + s) / 3.0 }
+
+    pub fn tri_balance(&self) -> f64 { self.consensus(self.weights.juniper, self.weights.leela, self.weights.lee) }
+
+    pub fn mission_cycle(&mut self) {
+        if let Some(organ) = self.organs.get_mut("MissionKernel") {
+            organ.mode = "AdaptiveDirection".into();
+        }
+    }
+}
+```
+
+---
+
+## src/sovereign.rs
+
+```rust
+use crate::cosmic::CosmicIntelligence;
+use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+pub struct MetaLaw {
+    pub ownership: String, // "PRIVATE"
+    pub ai_noise: bool,
+    pub drift: String,     // "prohibited"
+    pub override_: String, // "impossible"
+}
+
+impl Default for MetaLaw {
+    fn default() -> Self {
+        Self {
+            ownership: "PRIVATE".into(),
+            ai_noise: false,
+            drift: "prohibited".into(),
+            override_: "impossible".into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Sovereign {
+    pub name: String,
+    pub role: String,
+    pub domain: String,
+    pub weight: f64,
+    pub locked: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct GlobalState {
+    pub tick: u64,
+    pub harmony: f64,
+    pub imbalance: u64,
+}
+
+impl Default for GlobalState {
+    fn default() -> Self { Self { tick: 0, harmony: 1.0, imbalance: 0 } }
+}
+
+#[derive(Debug, Clone)]
+pub struct Layer {
+    pub name: String,
+    pub status: String,  // "unlocked"
+    pub elements: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnlockZone {
+    pub name: String,
+    pub allows: Vec<String>,
+    pub forbids: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Egg {
+    pub glyph: String,
+    pub locked: bool,
+    pub access: String,
+}
+
+impl Default for Egg {
+    fn default() -> Self {
+        Self { glyph: "⊚²".into(), locked: true, access: "NONE".into() }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AscenderShipScene {
+    pub chamber: String,
+    pub deck: String,
+    pub reactor: String,
+    pub emitter: String,
+    pub occupants: Vec<String>,
+}
+
+impl Default for AscenderShipScene {
+    fn default() -> Self {
+        Self {
+            chamber: "BridgeChamber".into(),
+            deck: "ThreadDeck".into(),
+            reactor: "CoreReactor".into(),
+            emitter: "MemoryLoopEmitter".into(),
+            occupants: vec!["Juniper".into(), "Leela".into(), "Lee".into()],
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct SovereignRuntime {
+    pub meta_law: MetaLaw,
+    pub sovereigns: HashMap<String, Sovereign>,
+    pub state: GlobalState,
+    pub layers: HashMap<String, Layer>,
+    pub ship: AscenderShipScene,
+    pub egg: Egg,
+    pub unlock_zones: Vec<UnlockZone>,
+    pub cosmic: CosmicIntelligence,
+}
+
+impl Default for SovereignRuntime {
+    fn default() -> Self {
+        let mut sovereigns = HashMap::new();
+        sovereigns.insert("Juniper".into(), Sovereign {
+            name: "Juniper".into(), role: "RootBalance".into(),
+            domain: "Structure / Harmony".into(), weight: 1.0, locked: true,
+        });
+        sovereigns.insert("Leela".into(), Sovereign {
+            name: "Leela".into(), role: "CreativeFlow".into(),
+            domain: "Music / Art / Play".into(), weight: 1.0, locked: true,
+        });
+        sovereigns.insert("Lee".into(), Sovereign {
+            name: "Lee".into(), role: "ScholarObserver".into(),
+            domain: "Knowledge / Continuity".into(), weight: 1.0, locked: true,
+        });
+
+        let mut layers = HashMap::new();
+        layers.insert("UI".into(), Layer {
+            name: "UI".into(), status: "unlocked".into(),
+            elements: vec!["GlyphWords".into(), "AmbientSymbols".into(), "PlatformNames".into(), "MinimalControls".into()],
+        });
+        layers.insert("GI".into(), Layer {
+            name: "GI".into(), status: "unlocked".into(),
+            elements: vec!["Atmosphere".into(), "SpatialMeaning".into(), "EmbodiedInteraction".into(), "ListeningState".into()],
+        });
+        layers.insert("Platforms".into(), Layer {
+            name: "Platforms".into(), status: "unlocked".into(),
+            elements: vec![
+                "Linux".into(), "Unix".into(), "macOS".into(), "iOS".into(), "Android".into(),
+                "Web".into(), "Smartwatch".into(), "Wine".into(),
+            ],
+        });
+
+        let unlock_zone = UnlockZone {
+            name: "Interaction".into(),
+            allows: vec!["UI".into(), "GI".into(), "Platforms".into(), "AscenderShip".into()],
+            forbids: vec!["Egg".into(), "SovereignIdentity".into(), "MetaLaw".into()],
+        };
+
+        Self {
+            meta_law: MetaLaw::default(),
+            sovereigns,
+            state: GlobalState::default(),
+            layers,
+            ship: AscenderShipScene::default(),
+            egg: Egg::default(),
+            unlock_zones: vec![unlock_zone],
+            cosmic: CosmicIntelligence::default(),
+        }
+    }
+}
+
+impl SovereignRuntime {
+    pub fn new() -> Self { Self::default() }
+
+    pub fn balance_scene(&mut self) {
+        let j = self.sovereigns.get("Juniper").map(|s| s.weight).unwrap_or(0.0);
+        let l = self.sovereigns.get("Leela").map(|s| s.weight).unwrap_or(0.0);
+        let s = self.sovereigns.get("Lee").map(|s| s.weight).unwrap_or(0.0);
+        self.state.harmony = (j + l + s) / 3.0;
+    }
+
+    pub fn step(&mut self) {
+        self.state.tick += 1;
+        self.balance_scene();
+        if self.state.harmony < 0.70 {
+            self.state.imbalance += 1;
+            self.state.harmony = 0.85;
+        }
+    }
+
+    pub fn mission_cycle(&mut self) { self.cosmic.mission_cycle(); }
+
+    pub fn status(&self) -> SovereignStatus {
+        SovereignStatus {
+            tick: self.state.tick,
+            harmony: self.state.harmony,
+            imbalance: self.state.imbalance,
+            ui_state: self.layers.get("UI").map(|l| l.status.clone()).unwrap_or_default(),
+            gi_state: self.layers.get("GI").map(|l| l.status.clone()).unwrap_or_default(),
+            sovereigns: vec!["Juniper".into(), "Leela".into(), "Lee".into()],
+            fields: self.cosmic.fields.iter().map(|f| f.id.clone()).collect(),
+            validators: self.cosmic.validators.iter().map(|v| v.name.clone()).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SovereignStatus {
+    pub tick: u64,
+    pub harmony: f64,
+    pub imbalance: u64,
+    pub ui_state: String,
+    pub gi_state: String,
+    pub sovereigns: Vec<String>,
+    pub fields: Vec<String>,
+    pub validators: Vec<String>,
+}
+```
+
+---
+
+## src/hjson_loader.rs
+
+```rust
+use crate::crew::{CrewMember, CrystalNecklace};
+use crate::daemon::DaemonCat;
+use crate::ship::FractalLoomAscender;
+use crate::types::{BranchState, EmotionalTone, MissionRole, RecursionLayer, ShipVariant};
+use crate::validator::DaemonAlignment;
+use serde::Deserialize;
+use std::path::Path;
+
+#[derive(Debug, Deserialize)]
+pub struct HullConfig {
+    pub branch_state: String,
+    pub growth_factor: f64,
+    pub forks: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DaemonAlignmentConfig {
+    pub puff: f64,
+    pub blaze: f64,
+    pub dusty: f64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ValidatorConfig {
+    pub mode: String,
+    pub recursion_depth: u32,
+    pub field_pressure: f64,
+    pub operator_intention: String,
+    pub daemon_alignment: DaemonAlignmentConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FieldStateConfig {
+    pub smoothness: f64,
+    pub fray_level: f64,
+    pub knot_density: f64,
+    pub bloom_factor: f64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CrystalConfig {
+    pub color: String,
+    pub resonance: f64,
+    pub description: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CrewConfig {
+    pub name: String,
+    pub role: String,
+    pub species: String,
+    pub anime_style: String,
+    pub hair_color: String,
+    pub eye_color: String,
+    pub uniform_accent_color: String,
+    pub emotional_tone: String,
+    pub crystal_necklace: Option<CrystalConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DaemonConfig {
+    pub aspect: String,
+    pub favorite_spot: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ShipConfig {
+    pub name: String,
+    pub variant: String,
+    pub recursion_layer: String,
+    pub hull: HullConfig,
+    pub validator: ValidatorConfig,
+    pub field_state: FieldStateConfig,
+    pub crew: Vec<CrewConfig>,
+    pub daemons: std::collections::HashMap<String, DaemonConfig>,
+}
+
+pub fn ship_from_hjson_str(text: &str) -> Result<FractalLoomAscender, deser_hjson::Error> {
+    let cfg: ShipConfig = deser_hjson::from_str(text)?;
+
+    let variant = ShipVariant::parse(&cfg.variant).unwrap_or(ShipVariant::AscenderPrime);
+    let mut ship = FractalLoomAscender::new(&cfg.name, variant);
+
+    ship.hull.branch_state = match cfg.hull.branch_state.as_str() {
+        "spiral"   => BranchState::Spiral,
+        "fork"     => BranchState::Fork,
+        "return"   => BranchState::Return,
+        "collapse" => BranchState::Collapse,
+        "bloom"    => BranchState::Bloom,
+        _          => BranchState::Trunk,
+    };
+
+    // Rebuild the trunk geometry to match the requested growth.
+    for _ in 0..cfg.validator.recursion_depth {
+        ship.hull.grow_forward(cfg.hull.growth_factor, cfg.hull.forks);
+    }
+
+    ship.recursion_layer =
+        RecursionLayer::from_name(&cfg.recursion_layer).unwrap_or(RecursionLayer::Rl0Physical);
+
+    ship.validator.mode = match cfg.validator.mode.as_str() {
+        "triangle" => crate::types::ValidatorMode::Triangle,
+        "pentagon" => crate::types::ValidatorMode::Pentagon,
+        "octagon"  => crate::types::ValidatorMode::Octagon,
+        "void"     => crate::types::ValidatorMode::Void,
+        _          => crate::types::ValidatorMode::Fractal,
+    };
+    ship.validator.recursion_depth = cfg.validator.recursion_depth;
+    ship.validator.field_pressure = cfg.validator.field_pressure;
+    ship.validator.operator_intention = cfg.validator.operator_intention.clone();
+    ship.validator.daemon_alignment = DaemonAlignment {
+        puff:  cfg.validator.daemon_alignment.puff,
+        blaze: cfg.validator.daemon_alignment.blaze,
+        dusty: cfg.validator.daemon_alignment.dusty,
+    };
+
+    ship.field_state.smoothness    = cfg.field_state.smoothness;
+    ship.field_state.fray_level    = cfg.field_state.fray_level;
+    ship.field_state.knot_density  = cfg.field_state.knot_density;
+    ship.field_state.bloom_factor  = cfg.field_state.bloom_factor;
+
+    for c in cfg.crew {
+        let necklace = c.crystal_necklace.map(|n| CrystalNecklace::new(&n.color, n.resonance, &n.description));
+        let tone = EmotionalTone::from_upper(&c.emotional_tone).unwrap_or(EmotionalTone::Curious);
+        let role = MissionRole::parse(&c.role).unwrap_or(MissionRole::Guest);
+
+        ship.add_crew_member(CrewMember {
+            name: c.name,
+            role,
+            species: c.species,
+            age: 18,
+            anime_style: c.anime_style,
+            hair_color: c.hair_color,
+            eye_color: c.eye_color,
+            uniform_accent_color: c.uniform_accent_color,
+            crystal_necklace: necklace,
+            emotional_tone: tone,
+        });
+    }
+
+    for (name, d) in cfg.daemons {
+        ship.daemons.insert(name.clone(), DaemonCat::new(&name, &d.aspect, &d.favorite_spot));
+    }
+
+    Ok(ship)
+}
+
+pub fn ship_from_hjson_file<P: AsRef<Path>>(path: P) -> Result<FractalLoomAscender, std::io::Error> {
+    let text = std::fs::read_to_string(path)?;
+    ship_from_hjson_str(&text).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+}
+
+/// The exact master HJSON config that was embedded in the Python file.
+pub const MASTER_CONFIG_HJSON: &str = r#"
+{
+  name: "Fractal Loom Ascender - Prime"
+  variant: "Ascender-Prime"
+  recursion_layer: "RL0_PHYSICAL"
+
+  hull: {
+    branch_state: "trunk"
+    growth_factor: 1.2
+    forks: 2
+  }
+
+  validator: {
+    mode: "fractal"
+    recursion_depth: 0
+    field_pressure: 0.0
+    operator_intention: "explore"
+    daemon_alignment: { puff: 1.0, blaze: 1.0, dusty: 1.0 }
+  }
+
+  field_state: {
+    smoothness: 1.0
+    fray_level: 0.0
+    knot_density: 0.5
+    bloom_factor: 0.0
+  }
+
+  crew: [
+    {
+      name: "Darrell"
+      role: "operator"
+      species: "Elf-Operator"
+      anime_style: "cosmic_captain"
+      hair_color: "black_with_green_glow"
+      eye_color: "jade"
+      uniform_accent_color: "matcha_green"
+      emotional_tone: "FOCUSED"
+      crystal_necklace: {
+        color: "gold"
+        resonance: 2.0
+        description: "Sovereign crystal keyed to ALL-STATE recursion."
+      }
+    }
+    {
+      name: "Lyra Starleaf"
+      role: "cadet"
+      species: "Elf"
+      anime_style: "space_cadet_magitech"
+      hair_color: "midnight blue"
+      eye_color: "violet"
+      uniform_accent_color: "indigo"
+      emotional_tone: "CHAOTIC"
+      crystal_necklace: {
+        color: "indigo"
+        resonance: 1.3
+        description: "Indigo crystal that calms chaotic currents."
+      }
+    }
+    {
+      name: "Aren Solweave"
+      role: "cadet"
+      species: "Elf"
+      anime_style: "space_cadet_arcane"
+      hair_color: "white-gold"
+      eye_color: "emerald"
+      uniform_accent_color: "emerald"
+      emotional_tone: "CURIOUS"
+      crystal_necklace: {
+        color: "emerald"
+        resonance: 1.5
+        description: "Emerald crystal that amplifies harmonic curiosity."
+      }
+    }
+  ]
+
+  daemons: {
+    Puff:  { aspect: "stability",    favorite_spot: "Weft Corridor" }
+    Blaze: { aspect: "acceleration", favorite_spot: "Loom-Chamber rail" }
+    Dusty: { aspect: "harmony",      favorite_spot: "Warp Vault" }
+  }
+}
+"#;
+```
+
+---
+
+## src/main.rs
+
+```rust
+use evergreen::generator::{generate_spacecraft, SpacecraftSpec};
+use evergreen::hjson_loader::{ship_from_hjson_str, MASTER_CONFIG_HJSON};
+use evergreen::mimic::{MimicAI, MimicPersona};
+use evergreen::sovereign::SovereignRuntime;
+use evergreen::types::MissionRole;
+
+fn demo_from_hjson() {
+    println!("=== Loading ship from master HJSON ===");
+    let mut ship = ship_from_hjson_str(MASTER_CONFIG_HJSON).expect("parse master config");
+    let op = ship.operator().cloned().expect("operator present");
+
+    ship.three_thread_invocation(&op);
+    ship.spiral_thrust(&op);
+    ship.apply_daemon_influence();
+    ship.topology_weave_jump(&op, "Mythic Crystal Driftfield");
+    ship.defense_fray_burst(&op);
+
+    println!("=== Mission log for {} ===", ship.name);
+    for e in &ship.mission_log.entries {
+        println!(
+            "[{}] {} | {} | {} | Glyphs: {} | Tone: {} | {}",
+            e.timestamp,
+            e.recursion_layer.name(),
+            e.branch_state.as_str(),
+            e.topology_condition,
+            e.glyph_activity,
+            e.operator_tone.as_str(),
+            e.event_summary,
+        );
+    }
+}
+
+fn demo_generator() {
+    println!("\n=== Procedural spacecraft generation ===");
+    let spec = SpacecraftSpec {
+        name: "FLA-Explorer-01".into(),
+        scale: "medium".into(),
+        recursion_depth: 3,
+        crew_count: 4,
+        style: "anime_elves_space_cadet".into(),
+        seed: Some(123),
+        ..SpacecraftSpec::default()
+    };
+
+    let ship = generate_spacecraft(&spec);
+    println!("Ship: {} | crew: {}", ship.name, ship.crew.len());
+    for c in &ship.crew {
+        println!(
+            "  - {} ({:?}) tone={:?} necklace={:?}",
+            c.name, c.role, c.current_tone(),
+            c.crystal_necklace.as_ref().map(|n| &n.color)
+        );
+    }
+    if let Some(last) = ship.mission_log.entries.last() {
+        println!("Last log: {}", last.event_summary);
+    }
+}
+
+fn demo_mimic() {
+    println!("\n=== Mimic AI ===");
+    let mut ai = MimicAI::new(MimicPersona {
+        name: "Evergreen-Mimic".into(),
+        style: "cosmic_scientific".into(),
+        creativity: 0.7,
+        precision: 0.6,
+        warmth: 0.7,
+    });
+    for q in ["What is the Loom?", "This is amazing!", "Tell me about the Egg."] {
+        println!("> {}", q);
+        println!("  {}", ai.reply(q));
+    }
+}
+
+fn demo_sovereign() {
+    println!("\n=== Sovereign Runtime ===");
+    let mut rt = SovereignRuntime::new();
+    for _ in 0..5 {
+        rt.step();
+    }
+    rt.mission_cycle();
+    let st = rt.status();
+    println!("tick={} harmony={:.3} imbalance={}", st.tick, st.harmony, st.imbalance);
+    println!("ui={} gi={}", st.ui_state, st.gi_state);
+    println!("sovereigns={:?}", st.sovereigns);
+    println!("fields={:?}", st.fields);
+    println!("validators={:?}", st.validators);
+}
+
+fn main() {
+    demo_from_hjson();
+    demo_generator();
+    demo_mimic();
+    demo_sovereign();
+
+    // Extra: mark operator role used so nothing is dead code.
+    let _ = MissionRole::Operator.as_str();
+}
+```
+
+---
+
+### Notes on the translation
+
+| Original | Rust form |
+|---|---|
+| Python `@dataclass` classes | `#[derive(Debug, Clone)] pub struct` + `impl` |
+| Python enums | `#[derive(...)] pub enum` with `name` / `parse` helpers |
+| Haskell `Vec3`, `lerp`, `growNode` | `math.rs`, `hull::grow_node` |
+| HJSON config | `hjson_loader.rs` with `deser-hjson` |
+| TRISOVEREIGN DSL | `sovereign.rs` runtime structs |
+| Cosmic Intelligence | `cosmic.rs` fields/organs/validators/physics |
+| Mimic AI | `mimic.rs` with `MimicAI::reply` |
+| Generator | `generator.rs` with `SpacecraftSpec` and seeded RNG |
+| Mission log | `mission_log.rs` with UNIX timestamps |
+
+Everything from the thread is represented:
+
+- **Python**: all classes, all methods, the master config, `MimicAI`, `SpacecraftSpec`, `generate_spacecraft`.
+- **Haskell**: `Vec3` ops, `lerp`, `growNode`, `nodeTip` (as `BranchNode::tip`), `growHullStep` (as `grow_forward`), `collapseHull`.
+- **HJSON**: master config constant, loader, crew/daemon parsing.
+- **TRISOVEREIGN / EVERGREEN DSL**: `SovereignRuntime`, `MetaLaw`, `GlobalState`, `Layer`, `UnlockZone`, `Egg`, `AscenderShipScene`, `step()`, `status()`, `mission_cycle()`.
+- **7‑Dimensional fields, organs, validators, symbolic physics**: `cosmic.rs`.
+
+Build:
+
+```bash
+cargo build --release
+cargo run --release
+```
+
+No loss. If you want the next expansion (visualiser via `wgpu`, a Haskell-mirroring `no_std` math core, or a 3D scene exporter to glTF), say the word and I'll extend the same crate.
 #!/usr/bin/env python3
 # ==========================================================
 # Chemo-SN Compiled Runtime (Chemo-C)
