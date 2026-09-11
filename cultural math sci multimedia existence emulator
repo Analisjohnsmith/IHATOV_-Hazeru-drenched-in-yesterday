@@ -7120,3 +7120,248 @@ def demo(skip_stress=False):
 
 if __name__ == "__main__":
     demo(skip_stress="--skip_stress" in sys.argv)
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import os
+from io import BytesIO
+import imageio.v2 as imageio
+
+plt.style.use('seaborn-v0_8')
+
+OUT = '/home/deck/Documents/Default Project'
+os.makedirs(OUT, exist_ok=True)
+
+# ============================================================
+#  Cat silhouette (3rd person, from behind/above)
+#  x right, y depth, z up
+# ============================================================
+
+def cat_body_points(n=1500):
+    pts = []
+    # torso elliptic tube
+    for _ in range(n):
+        t = np.random.uniform(0, 1)
+        theta = np.random.uniform(0, 2 * np.pi)
+        rx, ry = 0.26, 0.16
+        x = t * 1.7 - 0.85 + rx * np.cos(theta) * (1 - 0.25 * t)
+        y = ry * np.sin(theta) * (1 - 0.15 * t)
+        z = 0.5 + 0.13 * np.sin(t * np.pi) + 0.06 * np.cos(theta)
+        pts.append([x, y, z])
+    # head sphere
+    for _ in range(n // 2):
+        theta = np.random.uniform(0, 2 * np.pi)
+        phi = np.random.uniform(0, np.pi)
+        r = 0.2
+        x = 0.9 + r * np.sin(phi) * np.cos(theta)
+        y = r * np.sin(phi) * np.sin(theta)
+        z = 0.75 + r * np.cos(phi)
+        pts.append([x, y, z])
+    # ears cones
+    for side in [-1, 1]:
+        for _ in range(n // 8):
+            t = np.random.uniform(0, 1)
+            r = 0.06 * (1 - t)
+            theta = np.random.uniform(0, 2 * np.pi)
+            x = 0.86 + t * 0.13
+            y = side * 0.14 + r * np.cos(theta)
+            z = 0.95 + t * 0.25 + r * np.sin(theta) * 0.3
+            pts.append([x, y, z])
+    # tail tube
+    for _ in range(n // 3):
+        t = np.random.uniform(0, 1)
+        theta = np.random.uniform(0, 2 * np.pi)
+        curve = 0.5 * t ** 1.5
+        r = 0.035 * (1 - 0.3 * t)
+        x = -0.85 - t * 0.7
+        y = curve + r * np.cos(theta)
+        z = 0.5 + t * 0.45 + r * np.sin(theta)
+        pts.append([x, y, z])
+    # legs
+    for lx, ly in [(0.5, 0.15), (0.5, -0.15), (-0.5, 0.15), (-0.5, -0.15)]:
+        for _ in range(n // 8):
+            t = np.random.uniform(0, 1)
+            theta = np.random.uniform(0, 2 * np.pi)
+            pts.append([lx + 0.05 * np.cos(theta),
+                        ly + 0.05 * np.sin(theta),
+                        0.5 - t * 0.45])
+    return np.array(pts)
+
+
+def rot_vec(vec, axis, ang):
+    """Rotate vec by ang around unit axis (Rodrigues)."""
+    c, s = np.cos(ang), np.sin(ang)
+    C = 1 - c
+    ax, ay, az = axis
+    R = np.array([
+        [c + ax * ax * C, ax * ay * C - az * s, ax * az * C + ay * s],
+        [ay * ax * C + az * s, c + ay * ay * C, ay * az * C - ax * s],
+        [az * ax * C - ay * s, az * ay * C + ax * s, c + az * az * C]
+    ])
+    return R @ vec
+
+
+def fractal_branch_3d(origin, dirv, depth, max_depth, length, segments):
+    if depth == 0:
+        return
+    norm = np.linalg.norm(dirv)
+    if norm < 1e-10:
+        return
+    d = dirv / norm
+
+    # perpendicular axis
+    z = np.array([0.0, 0.0, 1.0])
+    axis = np.cross(d, z) if abs(d[2]) < 0.9 else np.cross(d, np.array([1.0, 0.0, 0.0]))
+    an = np.linalg.norm(axis)
+    if an < 1e-10:
+        axis = np.array([1.0, 0.0, 0.0])
+    else:
+        axis = axis / an
+
+    for rot in [-0.45, 0.0, 0.45]:
+        nd = rot_vec(d, axis, rot + 0.1 * np.random.randn())
+        nd = nd / np.linalg.norm(nd)
+        tip = origin + length * nd
+        segments.append((origin, tip, max_depth - depth))
+        fractal_branch_3d(tip, nd, depth - 1, max_depth, length * 0.65, segments)
+
+
+# ============================================================
+#  Build cat points and surface-normal estimates via PCA
+# ============================================================
+
+cat_pts = cat_body_points(1500)
+
+# estimate surface normals using coarse voxel binning instead of KDTree
+from collections import defaultdict
+bins = {}
+for p in cat_pts:
+    key = (int(p[0] * 8), int(p[1] * 8), int(p[2] * 8))
+    bins.setdefault(key, []).append(p)
+bin_centers = {k: np.mean(v, axis=0) for k, v in bins.items()}
+
+bin_keys = list(bin_centers.keys())
+centers = np.array([bin_centers[k] for k in bin_keys])
+
+# seed randomly from centers
+rng = np.random.default_rng(0)
+seed_idx = rng.choice(len(centers), size=120, replace=False)
+
+segments = []
+max_depth = 3
+base_len = 0.16
+
+for si in seed_idx:
+    key = bin_keys[si]
+    c = centers[si]
+    # get neighboring bin points to compute outward normal
+    pts_in = bins[key]
+    disp = pts_in - c
+    cov = (disp.T @ disp) / max(len(pts_in), 1)
+    w, v = np.linalg.eigh(cov)
+    normal = v[:, np.argmin(w)]  # smallest variance = normal direction
+    # orient outward from cat centroid
+    if np.dot(normal, c - cat_pts.mean(axis=0)) < 0:
+        normal = -normal
+    nrm = np.linalg.norm(normal)
+    if nrm < 1e-10:
+        continue
+    normal = normal / nrm
+    # jittered seed direction
+    d = normal + rng.standard_normal(3) * 0.2
+    d = d / np.linalg.norm(d)
+    fractal_branch_3d(c, d, max_depth, max_depth, base_len + rng.random() * 0.04, segments)
+
+print(f"{len(segments)} fractal segments generated")
+
+depths = np.array([s[2] for s in segments], dtype=float)
+cmap = plt.cm.magma
+norm = mcolors.Normalize(vmin=0, vmax=depths.max())
+
+
+def draw_cat(ax, alpha=0.2):
+    ax.scatter(cat_pts[:, 0], cat_pts[:, 2], cat_pts[:, 1],
+               c='#3a1f7a', s=0.3, alpha=alpha, depthshade=True)
+
+
+def draw_fractal(ax, visible_depths=None):
+    for s in segments:
+        if visible_depths is not None and s[2] not in visible_depths:
+            continue
+        (x0, y0, z0), (x1, y1, z1), d = s
+        col = cmap(norm(d))
+        ax.plot([x0, x1], [z0, z1], [y0, y1],
+                color=col, linewidth=0.5 + 0.8 * (1 - d / depths.max()), alpha=0.9)
+
+
+def finish_ax(ax, azim, elev=22):
+    ax.set_xlim(-2.0, 2.0)
+    ax.set_ylim(-0.5, 1.9)
+    ax.set_zlim(-0.8, 1.7)
+    ax.set_box_aspect((1.7, 1.1, 1.1))
+    ax.axis('off')
+    ax.view_init(elev=elev, azim=azim)
+
+
+# ============ STATIC PNG ============
+fig = plt.figure(figsize=(13, 13), facecolor='black')
+ax = fig.add_subplot(111, projection='3d', facecolor='black')
+draw_cat(ax)
+draw_fractal(ax)
+finish_ax(ax, azim=210, elev=20)
+ax.set_title("Fractal Cat — 3D Recursive Branching",
+             color='white', fontsize=15, pad=8, fontweight='bold')
+
+png_path = os.path.join(OUT, 'fractal_cat_3d.png')
+fig.savefig(png_path, dpi=250, bbox_inches='tight', facecolor='black')
+plt.close(fig)
+print(f"PNG saved: {png_path}")
+
+# ============ GIF ============
+n_grow = 6
+n_rot = 20
+sorted_depths = sorted(set(int(s[2]) for s in segments))
+frames = []
+
+for fi in range(n_grow):
+    d_idx = int(fi / n_grow * len(sorted_depths))
+    vd = sorted_depths[:d_idx + 1]
+    fig = plt.figure(figsize=(8, 8), facecolor='black')
+    ax = fig.add_subplot(111, projection='3d', facecolor='black')
+    draw_cat(ax, alpha=0.18)
+    draw_fractal(ax, vd)
+    finish_ax(ax, azim=210 + fi * 6)
+    buf = BytesIO()
+    fig.savefig(buf, format='png', dpi=100, bbox_inches='tight', facecolor='black')
+    plt.close(fig)
+    buf.seek(0)
+    frames.append(imageio.imread(buf))
+
+for fi in range(n_rot):
+    azim = 210 + n_grow * 6 + fi * (360 / n_rot)
+    fig = plt.figure(figsize=(8, 8), facecolor='black')
+    ax = fig.add_subplot(111, projection='3d', facecolor='black')
+    draw_cat(ax, alpha=0.18)
+    draw_fractal(ax)
+    finish_ax(ax, azim=azim, elev=22 + 4 * np.sin(fi * 0.4))
+    buf = BytesIO()
+    fig.savefig(buf, format='png', dpi=100, bbox_inches='tight', facecolor='black')
+    plt.close(fig)
+    buf.seek(0)
+    frames.append(imageio.imread(buf))
+
+for _ in range(3):
+    frames.append(frames[-1].copy())
+
+gif_path = os.path.join(OUT, 'fractal_cat_3d.gif')
+imageio.mimsave(gif_path, frames, duration=0.22, loop=0)
+print(f"GIF saved: {gif_path}")
+print("Done.")
+ge nerate image
+
