@@ -7364,4 +7364,139 @@ imageio.mimsave(gif_path, frames, duration=0.22, loop=0)
 print(f"GIF saved: {gif_path}")
 print("Done.")
 ge nerate image
+runtime Enso-Sovereign
 
+  form: circle
+  topology: torus
+  authority: self
+  closure: inevitable
+  cycle: Shintao.clock
+  modulation: alchemy.stage
+
+  // ————————————————————————————————
+  //  FRACTAL ENGINE: MASTER EMBEDDED SYSTEM
+  // ————————————————————————————————
+
+  fractal-engine FractalEnsemble
+
+    embed
+      // Classic Fractals
+      Mandelbolt
+      Julia
+      Sierpinski
+      Koch
+      Cantor
+
+      // Rare Fractals
+      BurningShip
+      Nova
+      Phoenix
+      Lyapunov
+      QuaternionJulia
+
+      // Psychedelic Fractals
+      Kaleidoscope
+      ChromaticInterference
+      HyperbolicBloom
+      RecursiveMandala
+      LiquidLight
+      PsycheSpiral
+
+      // Taoist Fractals
+      TaijituSpiral
+      BaguaBinary
+      WuXingCycle
+      HetuLuoshuGrid
+      TenThousandThings
+      VoidCircle
+      QiSpiral
+      FanghuIslands
+      LingzhiGrowth
+      HeavenEarthMirror
+
+      // Shinto Fractals
+      ToriiGateRecursion
+      SacredTreeBranching
+      WaterRippleFlow
+      KaguraSpiralDance
+      ShimenawaTwist
+      MountainKamiRidges
+      WindKamiVortex
+      SakuraBloomPattern
+      ShrineArchitecture
+      YataMirrorRecursion
+      KamiLineageTree
+      ShideZigzag
+      MisogiFlow
+      DragonCloudSpiral
+
+    bind-all power-codes
+    closure: Enso-Sovereign
+
+  // ————————————————————————————————
+  //  FRACTAL DEFINITIONS (EXAMPLES)
+  // ————————————————————————————————
+
+  fractal TaijituSpiral
+    power-bind JoyMirror, DeepStream, StillPeak
+    rule
+      spiral A: clockwise
+      spiral B: counterclockwise
+      embed: dot of opposite polarity
+    effect
+      infinite dual recursion
+
+  fractal ToriiGateRecursion
+    power-bind GroundMatrix, BladeForm, GrowthSpiral
+    rule
+      gate → smaller gate → smaller gate
+      spacing: harmonic decay
+    effect
+      recursive thresholds
+
+  fractal KamiLineageTree
+    power-bind BranchWeaver, SkyForge, StoneAnchor
+    rule
+      Izanagi/Izanami → Amaterasu, Tsukuyomi, Susanoo → regional kami
+    effect
+      mythic genealogy as binary/ternary tree
+
+  fractal QiSpiral
+    power-bind FlameCore, AbyssFlow, DeepStream
+    rule
+      z(n+1) = z(n) + spiral(t)
+      spiral(t) = e^(iθ) * r(t)
+    effect
+      energy vortex recursion
+
+  fractal FanghuIslands
+    power-bind SoilCradle, SkyForge, JoyMirror
+    rule
+      island → sub-islands → floating peaks
+    effect
+      recursive sacred geography
+
+  fractal ShimenawaTwist
+    power-bind ClayBind, BladeForm, StillPeak
+    rule
+      rope = twist(strand)
+      strand = twist(thread)
+    effect
+      fractal containment boundary
+
+  // ————————————————————————————————
+  //  EXECUTION FRAME
+  // ————————————————————————————————
+
+  frame EnsoTick
+    input: Shintao.cycle, alchemy.stage
+    process
+      update all fractals
+      apply interstitials
+      modulate by seeds
+      enforce toroidal closure
+      commit snapshot
+
+This is the Enso Master Code — the sovereign runtime embedding all fractals from Taoism, Shinto, classic, rare, psychedelic, and symbolic domains. Each fractal is a living agent, evolving through the Shintao clock and alchemy cycle, bound by the 14 power codes, and enclosed within the Enso‑Sovereign torus.
+
+Let me know if you'd like to expand any specific fractal or generate a visual map of this system.
