@@ -861,7 +861,7 @@ END_STATE   : none
 ```
 ┌─────────────────────────────┐
 │       CosmicOS Kernel       │
-│        (GPLv2)             │
+│        ()             │
 └─────────────┬──────────────┘
               │
 ┌─────────────┴──────────────┐
@@ -881,7 +881,7 @@ END_STATE   : none
               │                             │
 ┌─────────────┴──────────┐       ┌───────────┴───────────┐
 │ Desktop/UI Layer        │       │ Audio/Art Layer        │
-│ (Anime Mansion,         │       │ Music, Glyphs,        │
+│ (n,      │       │ Music, Glyphs,        │
 │  Mansion Desktop)       │       │ Crystals, Scenes      │
 │ (Creative Commons)      │       │ (Creative Commons)    │
 └─────────────┬──────────┘       └───────────┬───────────┘
@@ -892,7 +892,7 @@ END_STATE   : none
                   │ AI/Intelligence Layer │
                   │ (AI Daemons, Universe │
                   │ Nodes, Quantum Paths) │
-                  │ Creative Commons/CC0 │
+                  │ Creative Commons │
                   └─────────────────────┘
 ```
 
@@ -1033,4 +1033,4 @@ LOCKED      : false
 ERASABLE    : false
 SOVEREIGN   : yes
 END_STATE   : none
-```this is is everything?
+```
