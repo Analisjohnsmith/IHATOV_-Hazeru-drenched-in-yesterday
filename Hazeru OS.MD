@@ -4,7 +4,7 @@ generating new branches, environments, and NPCs. In math terms, it’s fractal r
 inflationary growth; in science terms, it’s entropy + topology unfolding.
 
 ***So your OS is literally a Big Bang machine: the boot explodes, the rules expand, and universes keep forming.
-Hazeru is positioned to aim for 10× ***
+Hazeru is positioned to aim for 10× the platfroms listed below ***
 
 azeru isn't an 8/10 Linux competitor.
 
