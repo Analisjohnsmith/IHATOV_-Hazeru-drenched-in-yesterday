@@ -1,0 +1,1275 @@
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
+from PIL import Image
+import os
+
+W, H = 3072, 1280
+DPI = 200
+FIGW = W / DPI
+FIGH = H / DPI
+
+PHI = (1 + np.sqrt(5)) / 2
+
+RAYS = [a for a in range(0, 360, 36)]
+RAYS_FINE = [a for a in range(0, 360, 18)]
+
+PALETTES = {
+    "blueprint": dict(
+        bg=(11, 29, 51), grid=(33, 62, 100), ring=(127, 215, 255),
+        ring2=(90, 160, 220), axis=(140, 190, 240), ray=(70, 130, 200),
+        ray2=(45, 90, 150), gold=(255, 217, 127), human=(200, 230, 255),
+        planet=(150, 210, 255), core=(240, 250, 255),
+    ),
+    "golden": dict(
+        bg=(20, 15, 8), grid=(60, 45, 24), ring=(222, 160, 60),
+        ring2=(180, 120, 40), axis=(150, 110, 50), ray=(120, 84, 34),
+        ray2=(80, 56, 24), gold=(255, 208, 122), human=(250, 220, 160),
+        planet=(230, 190, 110), core=(255, 236, 190),
+    ),
+    "neon": dict(
+        bg=(5, 2, 8), grid=(40, 15, 45), ring=(255, 46, 214),
+        ring2=(0, 240, 255), axis=(170, 60, 220), ray=(120, 40, 160),
+        ray2=(70, 25, 100), gold=(0, 240, 255), human=(255, 235, 250),
+        planet=(255, 46, 214), core=(255, 255, 255),
+    ),
+    "hologram": dict(
+        bg=(4, 16, 37), grid=(20, 50, 90), ring=(53, 240, 255),
+        ring2=(25, 150, 200), axis=(80, 200, 240), ray=(40, 130, 190),
+        ray2=(25, 90, 140), gold=(155, 246, 255), human=(200, 250, 255),
+        planet=(53, 240, 255), core=(230, 255, 255),
+    ),
+}
+
+
+def rgb(c, a=1.0):
+    return (c[0] / 255, c[1] / 255, c[2] / 255, a)
+
+
+def glow_lines(ax, xs, ys, c, lw, n_layers=6, base=1.0):
+    for i in range(n_layers):
+        f = base - i / n_layers * 0.85
+        a = (1.0 / n_layers) * (i + 1)
+        ax.plot(xs, ys, color=rgb(c, a), lw=lw * (1 + i * 0.55), solid_capstyle="round")
+
+
+def human_2d():
+    segs = [
+        ((0.0, 3.6), (0.0, 3.0)),
+        ((0.0, 3.0), (-0.3, 1.0)),
+        ((0.0, 3.0), (0.3, 1.0)),
+        ((-0.3, 2.6), (-1.6, 1.9)),
+        ((0.3, 2.6), (1.6, 1.9)),
+        ((0.0, 1.0), (-0.55, -0.3)),
+        ((0.0, 1.0), (0.55, -0.3)),
+        ((-0.55, -0.3), (-0.75, -1.25)),
+        ((0.55, -0.3), (0.75, -1.25)),
+    ]
+    return segs
+
+
+def gold_spiral(points=3000, turns=5.5, A=1.0):
+    b = np.log(PHI) / (np.pi / 2)
+    th = np.linspace(0, turns * np.pi * 2, points)
+    r = A * np.exp(b * th)
+    return r * np.cos(th), r * np.sin(th)
+
+
+def draw_2d_plan(ax, pal, xmin, xmax, ymin, ymax, rings=True, spiral=True, human=True):
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+    ax.set_aspect("equal")
+    ax.set_facecolor(rgb(pal["bg"]))
+    ax.axis("off")
+
+    for rr in np.arange(0.0, 15.0, 0.75):
+        th = np.linspace(0, 2 * np.pi, 700)
+        ax.plot(rr * np.cos(th), rr * np.sin(th), color=rgb(pal["grid"], 0.18), lw=0.6)
+    ax.plot([-15, 15], [0, 0], color=rgb(pal["grid"], 0.16), lw=0.6)
+    ax.plot([0, 0], [-6.4, 6.4], color=rgb(pal["grid"], 0.16), lw=0.6)
+
+    for a in RAYS_FINE:
+        x, y = np.cos(np.deg2rad(a)), np.sin(np.deg2rad(a))
+        ax.plot([0, 6 * x], [0, 6 * y], color=rgb(pal["ray2"], 0.4), lw=0.8)
+
+    ax.plot([-6, 6], [0, 0], color=rgb(pal["axis"], 0.8), lw=1.4)
+    ax.plot([0, 0], [-6, 6], color=rgb(pal["axis"], 0.8), lw=1.4)
+
+    for a in RAYS:
+        x, y = np.cos(np.deg2rad(a)), np.sin(np.deg2rad(a))
+        ax.plot([0, 6 * x], [0, 6 * y], color=rgb(pal["ray"], 0.9), lw=1.1)
+
+    th = np.linspace(0, 2 * np.pi, 800)
+    for rr, col, lw in [(6.0, pal["ring"], 2.2), (4.6, pal["ring2"], 1.2), (3.0, pal["ring"], 1.8), (1.55, pal["ring2"], 1.0), (0.85, pal["gold"], 1.2)]:
+        ax.plot(rr * np.cos(th), rr * np.sin(th), color=rgb(col, 0.95), lw=lw)
+
+    for a in RAYS:
+        x, y = np.cos(np.deg2rad(a)), np.sin(np.deg2rad(a))
+        c = ax.scatter([6 * x], [6 * y], s=16, color=rgb(pal["planet"]), edgecolors=rgb(pal["human"], 0.8), linewidths=0.5, zorder=5)
+        c.set_rasterized(False)
+
+    if spiral:
+        xs, ys = gold_spiral(A=0.00023, turns=5.5)
+        glow_lines(ax, xs, ys, pal["gold"], lw=1.1, n_layers=4)
+
+    if rings:
+        offs = [(-9.3, 1.05), (9.3, 1.05), (-13.2, -0.0), (13.2, -0.0)]
+        for ox, sc in offs:
+            for rr, col, lw in [(1.9 * sc, pal["ring2"], 1.0), (1.0 * sc, pal["ring"], 0.8)]:
+                ax.plot(ox + rr * np.cos(th), rr * np.sin(th) * 0.62, color=rgb(col, 0.7), lw=lw)
+
+    if human:
+        t = np.linspace(0, 2 * np.pi, 200)
+        ax.plot(np.cos(t) * 0.55, 3.6 + np.sin(t) * 0.55, color=rgb(pal["human"]), lw=2.2)
+        for (x0, y0), (x1, y1) in human_2d():
+            ax.plot([x0, x1], [y0, y1], color=rgb(pal["human"]), lw=2.2)
+        ax.add_patch(matplotlib.patches.Circle((0, 0), 0.35, color=rgb(pal["core"]), zorder=6))
+
+    return ax
+
+
+def draw_3d_scene(ax, pal, tilt=25.0, side_elements=True, human=True):
+    ax.set_facecolor(rgb(pal["bg"]))
+    ax.set_axis_off()
+    ax.set_box_aspect((W / H, 1, 1))
+    ax.set_xlim(-13.5, 13.5)
+    ax.set_ylim(-5.6, 5.6)
+    ax.set_zlim(-5.6, 5.6)
+
+    cx, cy, cz = np.cos(np.deg2rad(tilt)), np.sin(np.deg2rad(tilt)), 0.0
+
+    def rot(p):
+        x, y, z = p[:, 0], p[:, 1], p[:, 2]
+        y2 = cy * y - cz * z
+        z2 = cz * y + cy * z
+        return np.column_stack([x, y2, z2])
+
+    u = np.linspace(0, 2 * np.pi, 64)
+    th = np.linspace(0, 2 * np.pi, 700)
+
+    for a in RAYS:
+        x, y = np.cos(np.deg2rad(a)), np.sin(np.deg2rad(a))
+        pts = np.column_stack([np.linspace(0, 6 * x, 20), np.linspace(0, 6 * y, 20), np.zeros(20)])
+        pts = rot(pts)
+        ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color=rgb(pal["ray"], 0.45), lw=0.9)
+
+    for rr, col, lw in [(6.0, pal["ring"], 2.0), (3.0, pal["ring"], 1.6), (4.6, pal["ring2"], 1.0)]:
+        pts = np.column_stack([rr * np.cos(th), rr * np.sin(th), np.zeros_like(th)])
+        pts = rot(pts)
+        ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color=rgb(col, 0.95), lw=lw)
+
+    R, r = 4.0, 1.15
+    disc = np.meshgrid(u, th, indexing="ij")
+    xs = (R + r * np.cos(disc[0])) * np.cos(disc[1])
+    ys = (R + r * np.cos(disc[0])) * np.sin(disc[1])
+    zs = r * np.sin(disc[0])
+    pts = np.column_stack([xs.ravel(), ys.ravel(), zs.ravel()])
+    pts = rot(pts)
+    nx, ny, nz = pts[:, 0].reshape(xs.shape), pts[:, 1].reshape(xs.shape), pts[:, 2].reshape(xs.shape)
+    ang = disc[0] / (2 * np.pi)
+    cmap = plt.get_cmap("gist_heat" if pal["gold"][0] > 200 else "spring")
+    fc = cmap((ang.ravel() % 1.0))
+    fc[:, :3] = (np.array(pal["gold"]) / 255)[:3] * (0.55 + 0.45 * fc[:, :3].max(axis=1, keepdims=True))
+    pc = ax.plot_surface(nx, ny, nz, facecolors=fc.reshape(xs.shape + (4,)), rstride=2, cstride=2, linewidth=0, antialiased=True, shade=True, alpha=1.0)
+    pc.set_edgecolor("none")
+
+    if side_elements:
+        for ox, rad in [(-9.0, 2.0), (9.0, 2.0), (-11.5, 1.05), (11.5, 1.05)]:
+            pts = np.column_stack([ox + rad * np.cos(th), rad * np.sin(th), np.zeros_like(th)])
+            pts = rot(pts)
+            ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color=rgb(pal["ring2"], 0.65), lw=1.0)
+        for ox, oy, oz, rr in [(-9.0, 0, 2.4, 0.22), (9.0, 0, -2.4, 0.22), (11.5, 0, 1.2, 0.16), (-11.5, 0, -1.2, 0.16), (0, 0, 4.55, 0.3), (0, 0, -4.55, 0.24)]:
+            sp, spw = np.meshgrid(u, th)
+            spx = ox + rr * np.sin(sp) * np.cos(spw)
+            spy = oy + rr * np.sin(sp) * np.sin(spw)
+            spz = oz + rr * np.cos(sp)
+            sppts = np.column_stack([spx.ravel(), spy.ravel(), spz.ravel()])
+            sppts = rot(sppts)
+            ax.plot_surface(sppts[:, 0].reshape(spx.shape), sppts[:, 1].reshape(spx.shape), sppts[:, 2].reshape(spx.shape),
+                            color=rgb(pal["planet"]), rstride=3, cstride=3, linewidth=0, antialiased=True, shade=True, alpha=0.95)
+        for a in RAYS:
+            x, y = np.cos(np.deg2rad(a)), np.sin(np.deg2rad(a))
+            pts = np.column_stack([6 * x, 6 * y, 0]).reshape(1, 3)
+            pts = rot(pts)
+            ax.scatter(pts[0, 0], pts[0, 1], pts[0, 2], color=rgb(pal["planet"]), s=26, depthshade=False)
+
+    if human:
+        t = np.linspace(0, 2 * np.pi, 100)
+        head = np.column_stack([np.cos(t) * 0.55, 3.6 + np.sin(t) * 0.55, np.zeros_like(t)])
+        head = rot(head)
+        ax.plot(head[:, 0], head[:, 1], head[:, 2], color=rgb(pal["human"]), lw=2.2)
+        for (x0, y0), (x1, y1) in human_2d():
+            p0 = rot(np.array([[x0, y0, 0.0]]))
+            p1 = rot(np.array([[x1, y1, 0.0]]))
+            ax.plot([p0[0, 0], p1[0, 0]], [p0[0, 1], p1[0, 1]], [p0[0, 2], p1[0, 2]], color=rgb(pal["human"]), lw=2.2)
+
+    vax = rot(np.column_stack([np.zeros(20), np.zeros(20), np.linspace(-5.4, 5.4, 20)]))
+    ax.plot(vax[:, 0], vax[:, 1], vax[:, 2], color=rgb(pal["axis"], 0.5), lw=1.0)
+    return ax
+
+
+def setup_figure():
+    fig = plt.figure(figsize=(FIGW, FIGH), dpi=DPI)
+    return fig
+
+
+def render_2d(fname, pal, rings=True, spiral=True, human=True, glow=False):
+    fig = setup_figure()
+    ax = fig.add_axes([0, 0, 1, 1])
+    draw_2d_plan(ax, pal, -15.5, 15.5, -6.46, 6.46, rings=rings, spiral=spiral, human=human)
+    if glow:
+        for a in RAYS:
+            x, y = np.cos(np.deg2rad(a)), np.sin(np.deg2rad(a))
+            ax.plot([0, 6 * x], [0, 6 * y], color=rgb(pal["ray"], 0.07), lw=26)
+    fig.savefig(fname, dpi=DPI, facecolor=rgb(pal["bg"]), bbox_inches=None, pad_inches=0)
+    plt.close(fig)
+
+
+def render_3d(fname, pal, elev, azim, tilt=25.0, side=True, human=True, alpha=1.0, proj="persp"):
+    fig = setup_figure()
+    ax = fig.add_axes([0, 0, 1, 1], projection="3d")
+    draw_3d_scene(ax, pal, tilt=tilt, side_elements=side, human=human)
+    ax.view_init(elev=elev, azim=azim)
+    ax.set_proj_type(proj)
+    fig.savefig(fname, dpi=DPI, facecolor=rgb(pal["bg"]), bbox_inches=None, pad_inches=0)
+    plt.close(fig)
+
+
+OUT = "universe_renders"
+os.makedirs(OUT, exist_ok=True)
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+os.makedirs(OUT, exist_ok=True)
+
+files = [
+    ("universe_2d_blueprint.png", "blueprint", "2d"),
+    ("universe_2d_golden_mandala.png", "golden", "2d"),
+    ("universe_2d_neon.png", "neon", "2d"),
+    ("universe_3d_blueprint_iso.png", "blueprint", "3d"),
+    ("universe_3d_hologram_orbit.png", "hologram", "3d"),
+    ("universe_3d_neon_side.png", "neon", "3d"),
+]
+
+views = {
+    "universe_3d_blueprint_iso.png": dict(elev=22, azim=-55, tilt=28),
+    "universe_3d_hologram_orbit.png": dict(elev=38, azim=35, tilt=18),
+    "universe_3d_neon_side.png": dict(elev=10, azim=-78, tilt=40),
+}
+
+for fname, palname, kind in files:
+    pal = PALETTES[palname]
+    path = os.path.join(OUT, fname)
+    if kind == "2d":
+        render_2d(path, pal, glow=(palname in ("neon", "golden", "hologram")))
+    else:
+        render_3d(path, pal, **views[fname])
+    im = Image.open(path).convert("RGB")
+    im.save(path)
+    print(fname, im.size)
+
+
+
+
+Here is the mathematics visible in the image, transcribed into LaTeX:
+
+\[
+\int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}
+\]
+
+\[
+F = G\frac{m_1m_2}{r^2}
+\]
+
+\[
+E = mc^2
+\]
+
+\[
+i\hbar\frac{\partial}{\partial t}\psi
+=
+-\frac{\hbar^2}{2m}\nabla^2\psi
+\]
+
+\[
+\nabla\cdot\mathbf{E}=0
+\]
+
+\[
+\nabla\times\mathbf{B}=0
+\]
+
+\[
+ds^2=-c^2dt^2+dx^2+dy^2+dz^2
+\]
+
+\[
+\phi=\frac{1+\sqrt{5}}{2}
+\]
+
+\[
+R_{\mu\nu}-\frac{1}{2}Rg_{\mu\nu}=0
+\]
+
+\[
+\nabla^2\phi=0
+\]
+
+\[
+e^{i\pi}+1=0
+\]
+
+\[
+\Theta=\frac{2\pi}{\sqrt{3}}
+\]
+
+\[
+F_n=
+\frac{\phi^n-(-\phi)^{-n}}{\sqrt{5}}
+\]
+
+\[
+\sum_{n=0}^{\infty}r^n=\frac{1}{1-r}
+\]
+
+\[
+r_j=
+\phi^{-\left(0.5+\frac{j-1}{6}\right)}
+\]
+
+\[
+f(x)=
+\sum_{n=-\infty}^{\infty}c_n e^{inx}
+\]
+
+One small transcription note: the image appears to use \(dS^2\) for the spacetime interval, but mathematically the conventional notation is \(ds^2\), so I rendered it as \(ds^2\) above.
+
+Next
+
+Next, the visible geometric mathematics can be expressed in LaTeX as a unified set of mathematical objects:
+
+\[
+\mathbf{r}(u,v)=
+\begin{pmatrix}
+(R+r\cos v)\cos u\\
+(R+r\cos v)\sin u\\
+r\sin v
+\end{pmatrix},
+\qquad
+0\leq u,v<2\pi
+\]
+
+\[
+x^2+y^2+z^2=R^2
+\]
+
+\[
+x=R\sin\theta\cos\phi,
+\qquad
+y=R\sin\theta\sin\phi,
+\qquad
+z=R\cos\theta
+\]
+
+\[
+x^2+y^2=R^2
+\]
+
+\[
+z=f(x,y)
+\]
+
+\[
+\nabla f=
+\begin{pmatrix}
+\frac{\partial f}{\partial x}\\[2pt]
+\frac{\partial f}{\partial y}\\[2pt]
+\frac{\partial f}{\partial z}
+\end{pmatrix}
+\]
+
+\[
+\nabla^2 f=
+\frac{\partial^2f}{\partial x^2}
++
+\frac{\partial^2f}{\partial y^2}
++
+\frac{\partial^2f}{\partial z^2}
+\]
+
+\[
+\mathbf{r}_{n+1}
+=
+\mathbf{r}_n+
+\Delta\mathbf{r}_n
+\]
+
+\[
+N_{n+1}=2N_n,
+\qquad
+N_n=2^n
+\]
+
+\[
+\dim_B
+=
+\frac{\log 2}{\log(1/r)}
+\]
+
+\[
+\mathbf{x}_{n+1}=F(\mathbf{x}_n)
+\]
+
+\[
+F^{(n)}(x)
+=
+\underbrace{F\circ F\circ\cdots\circ F}_{n\text{ times}}(x)
+\]
+
+\[
+\lim_{n\rightarrow\infty}F^{(n)}(x)
+\]
+
+\[
+\oint_{\gamma}\mathbf{F}\cdot d\mathbf{r}
+\]
+
+\[
+\int_V \nabla\cdot\mathbf{F}\,dV
+=
+\oint_{\partial V}\mathbf{F}\cdot d\mathbf{A}
+\]
+
+\[
+\frac{\partial u}{\partial t}
+=
+D\nabla^2u
+\]
+
+\[
+\Box\psi
+=
+\left(
+\frac{1}{c^2}\frac{\partial^2}{\partial t^2}
+-\nabla^2
+\right)\psi
+\]
+
+\[
+\mathcal{F}\{f\}(\omega)
+=
+\int_{-\infty}^{\infty}
+f(t)e^{-i\omega t}\,dt
+\]
+Excellent transcription — you’ve captured the mathematical essence of the image beautifully. Here’s the complete LaTeX block formatted cleanly for printing or inclusion in a document:
+
+latex
+
+
+\[
+\int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}
+\]
+
+
+
+
+
+\[
+F = G\frac{m_1m_2}{r^2}
+\]
+
+
+
+
+
+\[
+E = mc^2
+\]
+
+
+
+
+
+\[
+i\hbar\frac{\partial}{\partial t}\psi
+=
+-\frac{\hbar^2}{2m}\nabla^2\psi
+\]
+
+
+
+
+
+\[
+\nabla\cdot\mathbf{E}=0
+\]
+
+
+
+
+
+\[
+\nabla\times\mathbf{B}=0
+\]
+
+
+
+
+
+\[
+ds^2=-c^2dt^2+dx^2+dy^2+dz^2
+\]
+
+
+
+
+
+\[
+\phi=\frac{1+\sqrt{5}}{2}
+\]
+
+
+
+
+
+\[
+R_{\mu\nu}-\frac{1}{2}Rg_{\mu\nu}=0
+\]
+
+
+
+
+
+\[
+\nabla^2\phi=0
+\]
+
+
+
+
+
+\[
+e^{i\pi}+1=0
+\]
+
+
+
+
+
+\[
+\Theta=\frac{2\pi}{\sqrt{3}}
+\]
+
+
+
+
+
+\[
+F_n=
+\frac{\phi^n-(-\phi)^{-n}}{\sqrt{5}}
+\]
+
+
+
+
+
+\[
+\sum_{n=0}^{\infty}r^n=\frac{1}{1-r}
+\]
+
+
+
+
+
+\[
+r_j=
+\phi^{-\left(0.5+\frac{j-1}{6}\right)}
+\]
+
+
+
+
+
+\[
+f(x)=
+\sum_{n=-\infty}^{\infty}c_n e^{inx}
+\]
+
+
+
+
+
+\[
+\mathbf{r}(u,v)=
+\begin{pmatrix}
+(R+r\cos v)\cos u\\
+(R+r\cos v)\sin u\\
+r\sin v
+\end{pmatrix},
+\qquad
+0\leq u,v<2\pi
+\]
+
+
+
+
+
+\[
+x^2+y^2+z^2=R^2
+\]
+
+
+
+
+
+\[
+x=R\sin\theta\cos\phi,
+\qquad
+y=R\sin\theta\sin\phi,
+\qquad
+z=R\cos\theta
+\]
+
+
+
+
+
+\[
+x^2+y^2=R^2
+\]
+
+
+
+
+
+\[
+z=f(x,y)
+\]
+
+
+
+
+
+\[
+\nabla f=
+\begin{pmatrix}
+\frac{\partial f}{\partial x}\
+
+\[2pt]
+\frac{\partial f}{\partial y}\
+
+\[2pt]
+\frac{\partial f}{\partial z}
+\end{pmatrix}
+\]
+
+
+
+
+
+\[
+\nabla^2 f=
+\frac{\partial^2f}{\partial x^2}
++
+\frac{\partial^2f}{\partial y^2}
++
+\frac{\partial^2f}{\partial z^2}
+\]
+
+
+
+
+
+\[
+\mathbf{r}_{n+1}
+=
+\mathbf{r}_n+
+\Delta\mathbf{r}_n
+\]
+
+
+
+
+
+\[
+N_{n+1}=2N_n,
+\qquad
+N_n=2^n
+\]
+
+
+
+
+
+\[
+\dim_B
+=
+\frac{\log 2}{\log(1/r)}
+\]
+
+
+
+
+
+\[
+\mathbf{x}_{n+1}=F(\mathbf{x}_n)
+\]
+
+
+
+
+
+\[
+F^{(n)}(x)
+=
+\underbrace{F\circ F\circ\cdots\circ F}_{n\text{ times}}(x)
+\]
+
+
+
+
+
+\[
+\lim_{n\rightarrow\infty}F^{(n)}(x)
+\]
+
+
+
+
+
+\[
+\oint_{\gamma}\mathbf{F}\cdot d\mathbf{r}
+\]
+
+
+
+
+
+\[
+\int_V \nabla\cdot\mathbf{F}\,dV
+=
+\oint_{\partial V}\mathbf{F}\cdot d\mathbf{A}
+\]
+
+
+
+
+
+\[
+\frac{\partial u}{\partial t}
+=
+D\nabla^2u
+\]
+
+
+
+
+
+\[
+\Box\psi
+=
+\left(
+\frac{1}{c^2}\frac{\partial^2}{\partial t^2}
+-\nabla^2
+\right)\psi
+\]
+
+
+
+
+
+\[
+\mathcal{F}\{f\}(\omega)
+=
+\int_{-\infty}^{\infty}
+f(t)e^{-i\omega t}\,dt
+\]
+
+
+
+latex
+\documentclass[12pt]{article}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\begin{document}
+
+\begin{center}
+    {\Large Mathematical Universe Equations}
+\end{center}
+
+
+
+\[
+\int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}
+\]
+
+
+
+
+
+\[
+F = G\frac{m_1m_2}{r^2}
+\]
+
+
+
+
+
+\[
+E = mc^2
+\]
+
+
+
+
+
+\[
+i\hbar\frac{\partial}{\partial t}\psi
+=
+-\frac{\hbar^2}{2m}\nabla^2\psi
+\]
+
+
+
+
+
+\[
+\nabla\cdot\mathbf{E}=0
+\]
+
+
+
+
+
+\[
+\nabla\times\mathbf{B}=0
+\]
+
+
+
+
+
+\[
+ds^2=-c^2dt^2+dx^2+dy^2+dz^2
+\]
+
+
+
+
+
+\[
+\phi=\frac{1+\sqrt{5}}{2}
+\]
+
+
+
+
+
+\[
+R_{\mu\nu}-\frac{1}{2}Rg_{\mu\nu}=0
+\]
+
+
+
+
+
+\[
+\nabla^2\phi=0
+\]
+
+
+
+
+
+\[
+e^{i\pi}+1=0
+\]
+
+
+
+
+
+\[
+\Theta=\frac{2\pi}{\sqrt{3}}
+\]
+
+
+
+
+
+\[
+F_n=
+\frac{\phi^n-(-\phi)^{-n}}{\sqrt{5}}
+\]
+
+
+
+
+
+\[
+\sum_{n=0}^{\infty}r^n=\frac{1}{1-r}
+\]
+
+
+
+
+
+\[
+r_j=
+\phi^{-\left(0.5+\frac{j-1}{6}\right)}
+\]
+
+
+
+
+
+\[
+f(x)=
+\sum_{n=-\infty}^{\infty}c_n e^{inx}
+\]
+
+
+
+
+
+\[
+\mathbf{r}(u,v)=
+\begin{pmatrix}
+(R+r\cos v)\cos u\\
+(R+r\cos v)\sin u\\
+r\sin v
+\end{pmatrix},
+\qquad
+0\leq u,v<2\pi
+\]
+
+
+
+
+
+\[
+x^2+y^2+z^2=R^2
+\]
+
+
+
+
+
+\[
+x=R\sin\theta\cos\phi,
+\qquad
+y=R\sin\theta\sin\phi,
+\qquad
+z=R\cos\theta
+\]
+
+
+
+
+
+\[
+x^2+y^2=R^2
+\]
+
+
+
+
+
+\[
+z=f(x,y)
+\]
+
+
+
+
+
+\[
+\nabla f=
+\begin{pmatrix}
+\frac{\partial f}{\partial x}\
+
+\[2pt]
+\frac{\partial f}{\partial y}\
+
+\[2pt]
+\frac{\partial f}{\partial z}
+\end{pmatrix}
+\]
+
+
+
+
+
+\[
+\nabla^2 f=
+\frac{\partial^2f}{\partial x^2}
++
+\frac{\partial^2f}{\partial y^2}
++
+\frac{\partial^2f}{\partial z^2}
+\]
+
+
+
+
+
+\[
+\mathbf{r}_{n+1}
+=
+\mathbf{r}_n+
+\Delta\mathbf{r}_n
+\]
+
+
+
+
+
+\[
+N_{n+1}=2N_n,
+\qquad
+N_n=2^n
+\]
+
+
+
+
+
+\[
+\dim_B
+=
+\frac{\log 2}{\log(1/r)}
+\]
+
+
+
+
+
+\[
+\mathbf{x}_{n+1}=F(\mathbf{x}_n)
+\]
+
+
+
+
+
+\[
+F^{(n)}(x)
+=
+\underbrace{F\circ F\circ\cdots\circ F}_{n\text{ times}}(x)
+\]
+
+
+
+
+
+\[
+\lim_{n\rightarrow\infty}F^{(n)}(x)
+\]
+
+
+
+
+
+\[
+\oint_{\gamma}\mathbf{F}\cdot d\mathbf{r}
+\]
+
+
+
+
+
+\[
+\int_V \nabla\cdot\mathbf{F}\,dV
+=
+\oint_{\partial V}\mathbf{F}\cdot d\mathbf{A}
+\]
+
+
+
+
+
+\[
+\frac{\partial u}{\partial t}
+=
+D\nabla^2u
+\]
+
+
+
+
+
+\[
+\Box\psi
+=
+\left(
+\frac{1}{c^2}\frac{\partial^2}{\partial t^2}
+-\nabla^2
+\right)\psi
+\]
+
+
+
+
+
+\[
+\mathcal{F}\{f\}(\omega)
+=
+\int_{-\infty}^{\infty}
+f(t)e^{-i\omega t}\,dt
+\]
+
+
+
+\end{document}
+
+latex
+\documentclass[tikz,border=10pt]{standalone}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+
+\begin{document}
+
+\begin{tikzpicture}
+
+% Outer circle
+\draw[thick] (0,0) circle (6);
+
+% Golden ratio rays
+\foreach \a in {0,36,72,108,144,180,216,252,288,324} {
+    \draw[thin] (0,0) -- (6*cos(\a),6*sin(\a));
+}
+
+% Inner circle (energy ring)
+\draw[thick] (0,0) circle (3);
+
+% Vertical axis
+\draw[thin] (0,-6) -- (0,6);
+
+% Horizontal axis
+\draw[thin] (-6,0) -- (6,0);
+
+% Torus (parametric)
+\begin{scope}[shift={(0,-1)}]
+\begin{axis}[
+    hide axis,
+    view={30}{30},
+    width=10cm,
+    height=10cm,
+]
+\addplot3[
+    surf,
+    shader=interp,
+    samples=30,
+    domain=0:360,
+    y domain=0:360,
+]
+(
+    {(4 + 1.5*cos(y)) * cos(x)},
+    {(4 + 1.5*cos(y)) * sin(x)},
+    {1.5*sin(y)}
+);
+\end{axis}
+\end{scope}
+
+\end{tikzpicture}
+
+\end{document}
+
+% Human head
+\draw[thick] (0,3.5) circle (0.5);
+
+% Torso
+\draw[thick] (0,3) -- (0,1);
+
+% Arms
+\draw[thick] (0,2.5) -- (-1.5,2);
+\draw[thick] (0,2.5) -- (1.5,2);
+
+% Legs
+\draw[thick] (0,1) -- (-0.8,-1);
+\draw[thick] (0,1) -- (0.8,-1);
+This is just the core skeleton — I can integrate it into your torus render so the human sits perfectly centered.
+
+latex
+\documentclass[tikz,border=10pt]{standalone}
+\usepackage{tikz}
+
+\begin{document}
+
+\begin{tikzpicture}[scale=1]
+
+% Human head
+\draw[thick] (0,3.5) circle (0.5);
+
+% Torso
+\draw[thick] (0,3) -- (0,1);
+
+% Arms
+\draw[thick] (0,2.5) -- (-1.5,2);
+\draw[thick] (0,2.5) -- (1.5,2);
+
+% Legs
+\draw[thick] (0,1) -- (-0.8,-1);
+\draw[thick] (0,1) -- (0.8,-1);
+
+% Optional: ground line
+\draw[thin] (-2,-1) -- (2,-1);
+
+\end{tikzpicture}
+
+\end{document}
+
+⭐ Full Combined TikZ Render (Human + Geometry)
+latex
+\documentclass[tikz,border=10pt]{standalone}
+\usepackage{tikz}
+
+\begin{document}
+
+\begin{tikzpicture}[scale=1]
+
+% Outer circle
+\draw[thick] (0,0) circle (6);
+
+% Golden ratio rays (10 rays, 36° apart)
+\foreach \a in {0,36,72,108,144,180,216,252,288,324} {
+    \draw[thin] (0,0) -- (6*cos(\a),6*sin(\a));
+}
+
+% Inner circle
+\draw[thick] (0,0) circle (3);
+
+% Vertical axis
+\draw[thin] (0,-6) -- (0,6);
+
+% Horizontal axis
+\draw[thin] (-6,0) -- (6,0);
+
+% --- Simple Geometric Human ---
+
+% Head
+\draw[thick] (0,3.5) circle (0.5);
+
+% Torso
+\draw[thick] (0,3) -- (0,1);
+
+% Arms
+\draw[thick] (0,2.5) -- (-1.5,2);
+\draw[thick] (0,2.5) -- (1.5,2);
+
+% Legs
+\draw[thick] (0,1) -- (-0.8,-1);
+\draw[thick] (0,1) -- (0.8,-1);
+
+% Ground line (optional)
+\draw[thin] (-2,-1) -- (2,-1);
+
+\end{tikzpicture}
+
+\end{document}
+
+
+    
